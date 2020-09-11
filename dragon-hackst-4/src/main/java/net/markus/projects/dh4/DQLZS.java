@@ -1,6 +1,7 @@
 
 package net.markus.projects.dh4;
 
+import java.util.Arrays;
 import net.markus.projects.dh4.util.Utils;
 
 /**
@@ -8,6 +9,8 @@ import net.markus.projects.dh4.util.Utils;
  */
 public class DQLZS {
 
+    private static boolean DEBUG = false;
+    
     //still TODO
     public static byte[] decompress(byte[] compressed, int decompressSize) {
         
@@ -16,13 +19,16 @@ public class DQLZS {
         int maxOff = 4096;
         
         //length = 2^4 = 16
+        //length = 2^3 = 8
         int maxLen = 16;
         
         
         System.out.println("compressSize=" + compressed.length);
         System.out.println("decompressSize=" + decompressSize);
         
-        System.out.println(Utils.toHexDump(compressed, 16, true, false, null));
+        if(DEBUG) {
+            System.out.println(Utils.toHexDump(compressed, 16, true, false, null));
+        }
         
         byte[] decompressed = new byte[decompressSize];
         
@@ -45,8 +51,12 @@ public class DQLZS {
             //}
             
             
-            System.out.println();
-            System.out.println("control byte at offset=" + offsetCompressed + " " + controlByteBits + " | 0x" + Utils.bytesToHex(new byte[] { controlByte }));
+            if(DEBUG) {
+                System.out.println();
+                System.out.println("control byte at offset=" + offsetCompressed + " " + controlByteBits + " | 0x" + Utils.bytesToHex(new byte[] { controlByte }));
+            }
+            
+            boolean fullBreak = false;
             
             //for(int i = 0; i < controlByteBits.length(); i++) {
             for(int i = controlByteBits.length()-1; i >= 0; i--) {
@@ -60,7 +70,9 @@ public class DQLZS {
                     decompressed[offsetDecompressed] = compressed[offsetCompressed];
                     buffer[offsetBuffer] = compressed[offsetCompressed];
                     
-                    System.out.println("write literal at offset=" + offsetCompressed + " | " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[] { literal }) + " | 0x" + Utils.bytesToHex(new byte[] { literal }));
+                    if(DEBUG) {
+                        System.out.println("write literal at offset=" + offsetCompressed + " | " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[] { literal }) + " | 0x" + Utils.bytesToHex(new byte[] { literal }));
+                    }
                     offsetCompressed++;
                     offsetDecompressed++;
                     offsetBuffer++;
@@ -74,14 +86,42 @@ public class DQLZS {
                     byte[] refBytes = new byte[] { compressed[offsetCompressed],  compressed[offsetCompressed+1] };
                     //byte[] refBytes3 = new byte[] { compressed[offset],  compressed[offset+1], compressed[offset+2] };
                     
+                    if(Utils.allZero(refBytes)) {
+                        offsetCompressed += 2;
+                        fullBreak = true;
+                        System.out.println("break because reference all zeros");
+                        break;
+                    }
+                    
                     //String refByteBits = Utils.toBits(refByte);
                     //String refBytes3Bits = Utils.toBits(refBytes3);
                     //System.out.println("reference at offset=" + offset + " " + refByteBits + " | 0x" + Utils.bytesToHex(new byte[] { refByte }));
                     
                     String refBytesBits = Utils.toBits(refBytes);
                     
-                    int len = Utils.bitsToIntLE(refBytesBits.substring(8, 12));
-                    len = (len + 4) % maxLen; //three zeros would make sense to form the int, offsetDecomp=768
+                    String p1 = refBytesBits.substring(0, 4);
+                    String p2 = refBytesBits.substring(4, 8);
+                    String p3 = refBytesBits.substring(8, 12);
+                    String p4 = refBytesBits.substring(12, 16);
+                    
+                    //int len = Utils.bitsToIntLE(refBytesBits.substring(8, 12));
+                    //len = (len + 4) % maxLen;
+                    
+                    String lenPart = refBytesBits.substring(12, 16);
+                    
+                    int len = Utils.bitsToIntLE(lenPart);
+                    len = (len + 3); // % maxLen;
+                    
+                    //len = 16
+                    
+                    //if(len == 0) {
+                    //    len = 16;
+                    //} else if (len == 1) {
+                    //    len = 17;
+                    //} else if (len == 2) {
+                    //    len = 18;
+                    //}
+                    
                     //len = (len + 5) % maxLen; 
                     //len = (len + 6) % maxLen; //offsetDecomp=1048
                     //len = (len + 7) % maxLen; //overflow
@@ -100,37 +140,40 @@ public class DQLZS {
                     //String offStr =  refBytesBits.substring(4, 8) + refBytesBits.substring(0, 4) + refBytesBits.substring(12, 16);
                     
                     //5. possibility
-                    String offStr =  refBytesBits.substring(0, 4) + refBytesBits.substring(12, 16) + refBytesBits.substring(4, 8);
+                    //String offStr =  refBytesBits.substring(0, 4) + refBytesBits.substring(12, 16) + refBytesBits.substring(4, 8);
+                    
+                    
+                    String offStr = p3 + p1 + p2;
                     
                     int off = Utils.bitsToIntLE(offStr);
                     
-                    //+397
-                    off = (off) % maxOff;
+                    off = (off + 18) % maxOff;
                     
                     //underflow
                     if(off < 0) {
                         off = maxOff - off;
                     }
                     
+                    if(DEBUG) {
+                        String line = String.format("reference at offsetComp=%d/%d offsetDecomp=%d/%d offsetBuff=%d len=%d off=%d offDiff=%d full=%s offStr=%s | %s", 
+                                offsetCompressed,
+                                compressed.length,
+                                offsetDecompressed,
+                                decompressSize,
+                                offsetBuffer,
+                                len,
+                                off,
+                                maxOff - off,
+                                Arrays.asList(p1, p2, p3, p4),
+                                offStr,
+                                Utils.bytesToHex(refBytes)
+                        );
                     
-                    
-                    String line = String.format("reference at offsetComp=%d offsetDecomp=%d offsetBuff=%d len=%d off=%d offDiff=%d full=%s offStr=%s | %s", 
-                            offsetCompressed,
-                            offsetDecompressed,
-                            offsetBuffer,
-                            len,
-                            off,
-                            maxOff - off,
-                            refBytesBits, //refBytesBits.substring(0, 8) + " " + refBytesBits.substring(8, 16),
-                            offStr,
-                            Utils.bytesToHex(refBytes)
-                    );
-                    
-                    System.out.println(line);
+                        System.out.println(line);
+                    }
                     //System.out.println("buffer: " + Utils.toHexString(buffer));
                     
                     //System.out.println("reference at offset=" + offset + " " + refBytes3Bits + " | 0x" + Utils.bytesToHex(refBytes3));
-                 
                     
                     //copy buffer to decompressed
                     for(int j = 0; j < len; j++) {
@@ -139,7 +182,9 @@ public class DQLZS {
                         decompressed[offsetDecompressed] = literal;
                         buffer[offsetBuffer] = literal;
 
-                        System.out.println("\twrite referred " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[] { literal }) + " | 0x" + Utils.bytesToHex(new byte[] { literal }));
+                        if(DEBUG) {
+                            System.out.println("\twrite referred " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[] { literal }) + " | 0x" + Utils.bytesToHex(new byte[] { literal }));
+                        }
                         
                         offsetDecompressed++;
                         offsetBuffer++;
@@ -170,13 +215,23 @@ public class DQLZS {
             //1101     1111      1111 1111
             // +1(dec)      +2(dec)
             
+            if(fullBreak) {
+                break;
+            }
             
             int a = 0;
             
         }//white
         
         
-        System.out.println(Utils.toHexDump(decompressed, 16, true, true, null));
+        
+        if(DEBUG) {
+            System.out.println(Utils.toHexDump(decompressed, 16, true, true, null));
+        }
+        
+        System.out.println("compressSize=" + offsetCompressed + "/" + compressed.length);
+        System.out.println("decompressSize=" + offsetDecompressed + "/" + decompressSize);
+        System.out.println("offsets match perfectly: " + (offsetDecompressed == decompressSize));
         
         return decompressed;
     }

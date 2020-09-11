@@ -147,7 +147,7 @@ public class HBDFrame extends javax.swing.JFrame {
         if(sb.compressed) {
             //try {
                 //FF7LZSInputStream lzs = new FF7LZSInputStream(new ByteArrayInputStream(sb.data));
-                byte[] uncompressed = new byte[0]; //DQLZS.decompress(sb.data, sb.sizeUncompressed); //new byte[sb.sizeUncompressed];
+                byte[] uncompressed = DQLZS.decompress(sb.data, sb.sizeUncompressed); //new byte[sb.sizeUncompressed];
                 
                 //for(int i = 0; i < uncompressed.length; i++) {
                 //    uncompressed[i] = (byte) lzs.read();
@@ -164,8 +164,20 @@ public class HBDFrame extends javax.swing.JFrame {
     }
 
     private void updateImage(StarZerosSubBlock sb) {
-        image = Utils.toGrayscale(sb.data, (int) jSpinnerImageWidth.getValue(), -1);
-        jPanelImage.repaint();
+        try {
+            byte[] data;
+            if(sb.compressed) {
+                data = DQLZS.decompress(sb.data, sb.sizeUncompressed); //new byte[sb.sizeUncompressed];
+            } else {
+                data = sb.data;
+            }
+            
+            image = Utils.toGrayscale(data, (int) jSpinnerImageWidth.getValue(), -1);
+            jPanelImage.repaint();
+        } catch(Exception e) {
+            //ignore
+        }
+        
     }
     
     private void draw(Graphics g) {

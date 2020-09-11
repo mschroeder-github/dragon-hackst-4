@@ -1111,11 +1111,11 @@ public class HBD1PS1D {
         
         //System.out.println(Utils.toHexDump(sbA.data, 16, true, false, null));
         
-        byte[] decompressed = DQLZS.decompress(sbB.data, sbB.sizeUncompressed);
+        //byte[] decompressed = DQLZS.decompress(sbB.data, sbB.sizeUncompressed);
         //System.out.println("type=" + sb.flags2);
         //byte[] decompressed = DQLZS.decompress(sb.data, sb.sizeUncompressed);
         
-        //HBDFrame.showGUI(hbd);
+        HBDFrame.showGUI(hbd);
     }
     
     private static void toGrayScale(HBD1PS1D hbd) throws IOException {
