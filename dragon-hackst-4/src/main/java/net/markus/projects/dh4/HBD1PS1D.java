@@ -1103,17 +1103,19 @@ public class HBD1PS1D {
         
         
         //593/2 "sample" in lz
+        //67/0 maybe ascii text?
         
         //StarZerosSubBlock sbA = hbd.getSubBlock(26034, 9);
         StarZerosSubBlock sbB = hbd.getSubBlock(593, 2);
+        //StarZerosSubBlock sbB = hbd.getSubBlock(67, 0);
         
         //System.out.println(Utils.toHexDump(sbA.data, 16, true, false, null));
-        //byte[] decompressed = DQLZS.decompress(sbB.data, sbB.sizeUncompressed);
         
+        byte[] decompressed = DQLZS.decompress(sbB.data, sbB.sizeUncompressed);
         //System.out.println("type=" + sb.flags2);
         //byte[] decompressed = DQLZS.decompress(sb.data, sb.sizeUncompressed);
         
-        HBDFrame.showGUI(hbd);
+        //HBDFrame.showGUI(hbd);
     }
     
     private static void toGrayScale(HBD1PS1D hbd) throws IOException {

@@ -116,6 +116,16 @@ public class Utils {
         return Integer.toBinaryString((b & 0xFF) + 0x100).substring(1);
     }
     
+    public static int bitsToIntLE(String bits) {
+        int n = 0;
+        for(int i = bits.length()-1; i >= 0; i--) {
+            if(bits.charAt(i) == '1') {
+                n += (int) Math.pow(2, (bits.length() - 1) - i);
+            }
+        }
+        return n;
+    }
+    
     public static String toHexString(byte[] bytes, int... cut) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
