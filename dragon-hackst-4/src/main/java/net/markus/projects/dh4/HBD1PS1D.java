@@ -1,10 +1,6 @@
 
 package net.markus.projects.dh4;
 
-import java.awt.Color;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,10 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
-import static java.util.stream.Collectors.toList;
-import javax.imageio.ImageIO;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.HBDBlock;
 import net.markus.projects.dh4.data.StarZeros;
@@ -63,351 +56,13 @@ public class HBD1PS1D {
         blocks = new ArrayList<>();
         starZerosList = new ArrayList<>();
         h60010108List = new ArrayList<>();
-    }
-    
-    //in Utils now
-    @Deprecated
-    public List<Integer> find(byte[] pattern) {
-        System.out.println("find " + Arrays.toString(pattern));
         
-        //int hashCode = Arrays.hashCode(pattern);
-        
-        List<Integer> pos = new ArrayList<>();
-        
-        for(int i = 0; i < data.length - pattern.length; i++) {
-            byte[] copy = Arrays.copyOfRange(data, i, i+pattern.length);
-            
-            //if(hashCode == Arrays.hashCode(copy)) {
-            //   pos.add(i);
-            //}
-            if(Arrays.equals(copy, pattern)) {
-                pos.add(i);
-            }
-        }
-        
-        System.out.println("find " + Arrays.toString(pattern) + " done");
-        return pos;
-    }
-    
-    @Deprecated
-    public List<Integer> findHiragana(int minLen) {
-        List<Integer> pos = new ArrayList<>();
-        
-        /*
-        82 9e |    ぁ あ ぃ い ぅ う ぇ え ぉ お か が き ぎ く
-        82 ae | ぐ け げ こ ご さ ざ し じ す ず せ ぜ そ ぞ た
-        82 be | だ ち ぢ っ つ づ て で と ど な に ぬ ね の は
-        82 ce | ば ぱ ひ び ぴ ふ ぶ ぷ へ べ ぺ ほ ぼ ぽ ま み
-        82 de | む め も ゃ や ゅ ゆ ょ よ ら り る れ ろ ゎ わ
-        82 ee | ゐ ゑ を ん
-        */
-        
-        byte[] _82 = Utils.hexStringToByteArray("82");
-        byte[] beginArray = Utils.hexStringToByteArray("a0"); //a
-        byte[] endArray = Utils.hexStringToByteArray("f1"); //n
-        
-        int len = 0;
-        for(int i = 0; i < data.length; i += 2) {
-            if(data[i] == _82[0] && data[i+1] >= beginArray[0] && data[i+1] <= endArray[0]) {
-                len++;
-            } else {
-                if(len >= minLen) {
-                    pos.add(i - len*2);
-                }
-                len = 0;
-            }
-        }
-        
-        return pos;
-    }
-
-    //was wrong
-    @Deprecated
-    private void headerTest() throws IOException {
-        
-        for(int i = 0; i < 256; i++) {
-            byte[] copy = Arrays.copyOfRange(data, i*4, i*4 + 4);
-            
-            System.out.println(i + ": " + Utils.bytesToIntLE(copy));
-        }
-        
-        byte[] title = Arrays.copyOfRange(data, 256*4, 256*4 + 12);
-        String str = new String(title);
-        System.out.println(str);
-        
-        byte[] firstTim = Arrays.copyOfRange(data, 2048, 8192);
-        FileUtils.writeByteArrayToFile(new File(file.getParentFile(), "out.TIM"), firstTim);
-        
-        int a = 0;
-    }
-    
-    //maybe wrong
-    @Deprecated 
-    private BufferedImage readTIM(int offset) throws IOException {
-        ByteArrayInputStream is = new ByteArrayInputStream(data);
-        is.skip(offset);
-        
-        byte[] timMagicNumber = new byte[4];
-        is.read(timMagicNumber);
-        
-        int version = is.read();
-        is.skip(3);
-        
-        byte[] buffer = new byte[4];
-        
-        byte[] buffer2 = new byte[2];
-        
-        is.read(buffer);
-        int l = Utils.bytesToIntLE(buffer);
-        
-        is.read(buffer2);
-        int x = Utils.bytesToShortLE(buffer2);
-        
-        is.read(buffer2);
-        int y = Utils.bytesToShortLE(buffer2);
-        
-        is.read(buffer2);
-        int w = Utils.bytesToShortLE(buffer2);
-        
-        is.read(buffer2);
-        int h = Utils.bytesToShortLE(buffer2);
-        
-        
-        System.out.println("l: " + l + ", (" + x + "," + y + ") " + w + "x" + h);
-        
-        //5552
-        //is.read(buffer);
-        //int a = Utils.bytesToIntLE(buffer);
-        
-        
-        //is.read(buffer);
-        //int b = Utils.bytesToIntLE(buffer);
-        
-        //C8 2F begins here
-        is.skip(8);
-        
-        //C8 = 200
-        //2F = 47
-        //200 * 47 = 9400 (makes no sense)
-        //2FC8 = 12232
-        
-        //24 bits per pixel => 3 bytes per pixel
-        
-        //5553 / 3 => 1851 pixel
-        
-        //The PlayStation is also capable of handling data in 24-bit color (BPP = 11),
-        //in which case the color samples are stored as 3-byte groups.
-        //In the event that an image's width is an uneven number of pixels, 
-        //the last byte is left as padding; the first pixel of a new row is always stored at the corresponding
-        //first pixel of the frame buffer row. 
-        //The color samples are stored in the following order: 
-        
-        for(int width = 2; width <= 1851; width++) {
-            if(1851 % width == 0) {
-                System.out.println(width + "x" + 1851/width);
-            }
-        }
-        
-        BufferedImage bi = new BufferedImage(617, 3, BufferedImage.TYPE_INT_RGB);
-        int biW = bi.getWidth();
-        int biH = bi.getHeight();
-        
-        
-        int j = 0;
-        for(int i = 0; i <= l; i += 3) {
-            
-            int r = is.read();
-            int g = is.read();
-            int b = is.read();
-            
-            int xx = j % biW;
-            int yy = (int) j / biW;
-            bi.setRGB(xx, yy, new Color(r, g, b).getRGB());
-            
-            System.out.println((j+1) + " at " + xx + "x" +  yy + " " + Arrays.asList(r,g,b));
-            j++;
-        }
-        
-        
-        
-        int b2 = is.read();
-        System.out.println("last: " + b2);
-        b2 = is.read();
-        System.out.println("last: " + b2);
-        
-        
-        
-        
-        return bi;
-    }
-    
-    private BufferedImage toGrayscale(int w, int max) {
-        if(max == -1) {
-            max = data.length;
-        }
-        
-        int h = (int) (max / w) + 1;
-        
-        System.out.println(w + "x" + h);
-        
-        BufferedImage bi = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-        
-        for(int i = 0; i < max; i++) {
-            int v = (int) (data[i] & 0xff); //unsigned
-            bi.setRGB(i % w, i / w, new Color(v, v, v).getRGB());
-            
-            if(i % 100000 == 0) {
-                System.out.println((i / (float) data.length)*100 + "%");
-            }
-        }
-        
-        return bi;
-    }
-    
-    //analysis at the beginning
-    @Deprecated
-    private void sameBlocks(int blockSize, int gtClusterSize) {
-        
-        Map<Integer, List<Integer>> m = new HashMap<>();
-        
-        for(int i = 0; i < data.length - blockSize; i += blockSize) {
-            
-            byte[] block = Arrays.copyOfRange(data, i, i + blockSize);
-            
-            boolean allSame = true;
-            byte first = block[0];
-            for(int j = 1; j < block.length; j++) {
-                if(block[j] != first) {
-                    allSame = false;
-                    break;
-                }
-            }
-            
-            if(allSame)
-                continue;
-            
-            List<Integer> l = m.computeIfAbsent(Arrays.hashCode(block), a -> new ArrayList<>());
-            
-            l.add(i);
-            
-            if(i % 1000000 == 0) {
-                System.out.println((i / (float) data.length)*100 + "%");
-            }
-        }
-        
-        List<Entry<Integer, List<Integer>>> ll = m.entrySet().stream().filter(e -> e.getValue().size() > gtClusterSize).sorted((a,b) -> Integer.compare(b.getValue().size(), a.getValue().size())).collect(toList());
-        System.out.println(ll.size() + " entries");
-        
-        //double check
-        for(Entry<Integer, List<Integer>> e : ll) {
-            int pos0 = e.getValue().get(0);
-            byte[] b = Arrays.copyOfRange(data, pos0, pos0+blockSize);
-            
-            for(int i : e.getValue().toArray(new Integer[0])) {
-                byte[] b2 = Arrays.copyOfRange(data, i, i+blockSize);
-                if(!Arrays.equals(b, b2)) {
-                    e.getValue().remove(i);
-                }
-            }
-        }
-        
-        //move up until not equal
-        for(Entry<Integer, List<Integer>> e : ll) {
-            
-            int offset = 0;
-            int pos0 = e.getValue().get(0);
-            
-            boolean allSame = true;
-            while(allSame) {
-                offset--;
-                
-                byte[] b = Arrays.copyOfRange(data, pos0 + offset, pos0 + offset + blockSize);
-                for(int i : e.getValue()) {
-                    byte[] b2 = Arrays.copyOfRange(data, i + offset, i + offset + blockSize);
-                    if(!Arrays.equals(b, b2)) {
-                        allSame = false;
-                        break;
-                    }
-                }
-            }
-            
-            offset++;
-            
-            
-            System.out.println(offset);
-            
-            for(int i = 0; i < e.getValue().size(); i++) {
-                e.getValue().set(i, e.getValue().get(i) + offset);
-            }
-            
-            //-431734076=[15659580, 16939580, 17216060, 28740156, 31855164, 40899132, 41153084, 48843324, 49103420, 52046396, 52478524, 52974140, 53191228, 53412412, 53705276, 53924412, 54485564, 54721084, 54944316, 55163452, 55736892, 55972412, 56207932, 56427068, 56648252, 57231932, 57467452, 57702972, 57858620, 58057276, 58384956, 58624572, 59189820, 59425340, 59644476, 59863612, 60043836, 60248636, 60389948, 60545596, 60777020, 61119036, 61399612, 61985340, 62229052, 62468668, 62687804, 62908988, 63072828, 63416892, 63560252, 64131644, 64344636, 64569916, 64811580, 65040956, 65221180, 65423932, 65641020, 66576956, 66896444, 67115580, 67258940, 68823612, 69026364, 69481020, 69755452, 70001212, 74811964, 74975804, 75156028, 75358780, 75500092, 75719228, 75940412, 76542524, 76780092, 77060668, 77400636, 77630012, 77859388, 80767548, 81037884, 84568636, 84822588, 89856572, 92971580, 93237820, 94007868, 94265916, 108145212, 108415548, 109855292, 110115388, 115206716, 115640892, 115894844, 120568380, 120844860]
-            System.out.println(e);
-        }
-        
-        
-        ll.forEach(e -> System.out.println(e));
-     
-        
-    }
-    
-    //not necessary anymore
-    @Deprecated
-    private void writeBlocks2048(int number, int startIndex) throws IOException {
-        for(int i = startIndex; i < startIndex + number; i++) {
-            
-            byte[] block = Arrays.copyOfRange(data, i * 2048, i * 2048 + 2048);
-            
-            FileUtils.writeByteArrayToFile(new File(file.getParentFile(), "block-" + i + ".bin"), block);
-        }
-    }
-    
-    //use correctBlockExtraction
-    @Deprecated
-    private void extractFirstBlocks() throws IOException {
-        
-        File folder = new File(file.getParentFile(), "firstBlocks");
-        folder.mkdir();
-        
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        
-        FileUtils.writeByteArrayToFile(new File(folder, "blockfirst.bin"), Arrays.copyOfRange(data, 0, 2048));
-        
-        int len = 2048;
-        int offset = 2048;
-        int blockIndex = 0;
-        
-        boolean cont = true;
-        while(baos.size() < 2048 * 12) {
-            byte[] block = Arrays.copyOfRange(data, offset, offset + len);
-            
-            if(offset != 2048 && 
-               block[0] == 1 && block[1] == 0 && block[2] == 0 && block[3] == 0) { //Block here
-               
-                //save previouse TIM block
-                byte[] fullBlock = baos.toByteArray();
-                
-                int numberOf2048blocks = fullBlock[4] & 0xff;
-                
-                int size = Utils.bytesToIntLE(Arrays.copyOfRange(fullBlock, 8, 8+4));
-                int unknown = Utils.bytesToIntLE(Arrays.copyOfRange(fullBlock, 12, 12+4)); //always zero
-                int size2 = Utils.bytesToIntLE(Arrays.copyOfRange(fullBlock, 16, 16+4)); //always as size
-                int size3 = Utils.bytesToIntLE(Arrays.copyOfRange(fullBlock, 20, 20+4));
-                
-                FileUtils.writeByteArrayToFile(new File(folder, "block-"+ Arrays.asList(blockIndex, numberOf2048blocks, size, unknown, size2, size3) +".bin"), fullBlock);
-                
-                //reset
-                baos = new ByteArrayOutputStream();
-                blockIndex++;
-            }
-            
-            baos.write(block);
-            
-            offset += len;
-        }
+        reader = new PsxJisReader();
+        reader.readTable();
     }
 
     //extracts all blocks and puts them in lists for further analysis
-    private void correctBlockExtraction() {
+    public void correctBlockExtraction() {
         
         //always this length
         int len = 2048;
@@ -648,11 +303,11 @@ public class HBD1PS1D {
                 
                 offset += 2;
                 
-                szb.flags2 = Utils.bytesToShortLE(Arrays.copyOfRange(block, offset, offset+2));
+                szb.type = Utils.bytesToShortLE(Arrays.copyOfRange(block, offset, offset+2));
                 
                 offset += 2;
                 
-                szb.compressed = szb.flags1 != 0;
+                szb.compressed = szb.sizeUncompressed != szb.size && szb.flags1 != 0; //maybe better to check with sizes
                 
                 starZeros.starZerosBlocks.add(szb);
             }
@@ -803,7 +458,7 @@ public class HBD1PS1D {
             for(StarZerosSubBlock szb : starZeros.starZerosBlocks) {
                 //System.out.println("\t" + szb.data.length + " " + szb + " " + szb.headerHexString);
                 
-                subBlockTypes.add(szb.flags2);
+                subBlockTypes.add(szb.type);
                 
                 byte[] preview = Arrays.copyOfRange(szb.data, 0, 128);
                 
@@ -1018,11 +673,26 @@ public class HBD1PS1D {
         List<StarZerosSubBlock> l = new ArrayList<>();
         for(StarZeros sz : starZerosList) {
             for(StarZerosSubBlock sb : sz.starZerosBlocks) {
-                if(sb.flags2 == type) {
+                if(sb.type == type) {
                     l.add(sb);
                 }
             }
         }
+        return l;
+    }
+    
+    public List<StarZerosSubBlock> getStarZerosSubBlocksCompressed() {
+        List<StarZerosSubBlock> l = new ArrayList<>();
+        for(StarZeros sz : starZerosList) {
+            for(StarZerosSubBlock sb : sz.starZerosBlocks) {
+                if(sb.compressed) {
+                    l.add(sb);
+                }
+            }
+        }
+        l.sort((a,b) -> {
+            return Integer.compare(a.size, b.size);
+        });
         return l;
     }
     
@@ -1051,46 +721,23 @@ public class HBD1PS1D {
             return cmp;
         });
     }
+
+    public List<StarZerosSubBlock> distinct(List<StarZerosSubBlock> l) {
+        List<StarZerosSubBlock> distinct = new ArrayList<>();
+        Set<Integer> hashes = new HashSet<>();
+        for(StarZerosSubBlock sb : l) {
+            int hash = Arrays.hashCode(sb.data);
+            if(!hashes.contains(hash)) {
+                distinct.add(sb);
+                hashes.add(hash);
+            }
+        }
+        return distinct;
+    }
     
-    
-    
+    /*
     public static void main(String[] args) throws Exception {
         
-        //System.out.println(Utils.toBits((byte)255));
-        //System.out.println(Utils.toBits((byte)128));
-        //System.out.println(Utils.toBits(new byte[] { 127, 3, 18 }));
-        
-        
-        //319.436.800 bytes
-        HBD1PS1D hbd = new HBD1PS1D(new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/HBD1PS1D.Q41"));
-        
-        
-        
-        PsxJisReader reader = new PsxJisReader();
-        reader.readTable();
-        
-        hbd.reader = reader;
-        
-        //want to look into patterns
-        //toGrayScale(hbd);
-        
-        //is hbd made out of 2048 blocks?
-        //works they fill it with zeros, but images have different sizes
-        //writeBlocks(hbd);
-        
-        //seems to be that first data are the blocks
-        //hbd.extractFirstBlocks();
-        
-        //the number of 2048 is stated at 0x04
-        hbd.correctBlockExtraction();
-        
-        //look into blocks: 60 01 01 80
-        hbd.h60010180Extraction();
-        //hbd.h60010180Analysis();
-        
-        //look into blocks: * 00 00 00
-        hbd.starZerosExtraction();
-        //hbd.starZerosAnalysis();
         
         //try decompress
         List<StarZerosSubBlock> l = hbd.getStarZerosSubBlocks();
@@ -1117,7 +764,8 @@ public class HBD1PS1D {
         
         HBDFrame.showGUI(hbd);
     }
-    
+    */
+    /*
     private static void toGrayScale(HBD1PS1D hbd) throws IOException {
         //seems to be that there are 2048 blocks
         BufferedImage img = hbd.toGrayscale((int) Math.pow(2, 11), -1);
@@ -1127,5 +775,6 @@ public class HBD1PS1D {
         System.out.println("write bmp...");
         ImageIO.write(img, "bmp", new File(hbd.file.getParentFile(), img.getWidth() + "x" + img.getHeight() + "-all.bmp"));
     }
-
+    */
+    
 }

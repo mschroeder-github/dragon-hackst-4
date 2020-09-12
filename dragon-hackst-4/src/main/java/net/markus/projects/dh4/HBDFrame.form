@@ -62,12 +62,13 @@
               <Layout>
                 <DimensionLayout dim="0">
                   <Group type="103" groupAlignment="0" attributes="0">
+                      <Component id="jComboBoxBlockFilter" max="32767" attributes="0"/>
+                      <Component id="jScrollPane1" max="32767" attributes="0"/>
                       <Group type="102" attributes="0">
-                          <Group type="103" groupAlignment="0" attributes="0">
-                              <Component id="jComboBoxBlockFilter" max="32767" attributes="0"/>
-                              <Component id="jScrollPane1" max="32767" attributes="0"/>
-                          </Group>
-                          <EmptySpace min="-2" pref="0" max="-2" attributes="0"/>
+                          <Component id="jCheckBoxDistinct" min="-2" max="-2" attributes="0"/>
+                          <EmptySpace max="-2" attributes="0"/>
+                          <Component id="jLabelStatus" max="32767" attributes="0"/>
+                          <EmptySpace max="-2" attributes="0"/>
                       </Group>
                   </Group>
                 </DimensionLayout>
@@ -76,7 +77,12 @@
                       <Group type="102" alignment="1" attributes="0">
                           <Component id="jComboBoxBlockFilter" min="-2" max="-2" attributes="0"/>
                           <EmptySpace max="-2" attributes="0"/>
-                          <Component id="jScrollPane1" pref="442" max="32767" attributes="0"/>
+                          <Group type="103" groupAlignment="3" attributes="0">
+                              <Component id="jCheckBoxDistinct" alignment="3" min="-2" max="-2" attributes="0"/>
+                              <Component id="jLabelStatus" alignment="3" min="-2" max="-2" attributes="0"/>
+                          </Group>
+                          <EmptySpace max="-2" attributes="0"/>
+                          <Component id="jScrollPane1" pref="421" max="32767" attributes="0"/>
                       </Group>
                   </Group>
                 </DimensionLayout>
@@ -117,6 +123,17 @@
                   <AuxValues>
                     <AuxValue name="JavaCodeGenerator_TypeParameters" type="java.lang.String" value="&lt;String&gt;"/>
                   </AuxValues>
+                </Component>
+                <Component class="javax.swing.JCheckBox" name="jCheckBoxDistinct">
+                  <Properties>
+                    <Property name="selected" type="boolean" value="true"/>
+                    <Property name="text" type="java.lang.String" value="Distinct"/>
+                  </Properties>
+                </Component>
+                <Component class="javax.swing.JLabel" name="jLabelStatus">
+                  <Properties>
+                    <Property name="text" type="java.lang.String" value=" "/>
+                  </Properties>
                 </Component>
               </SubComponents>
             </Container>
@@ -271,6 +288,30 @@
                       </Group>
                     </DimensionLayout>
                   </Layout>
+                </Container>
+                <Container class="javax.swing.JScrollPane" name="jScrollPane5">
+                  <AuxValues>
+                    <AuxValue name="autoScrollPane" type="java.lang.Boolean" value="true"/>
+                  </AuxValues>
+                  <Constraints>
+                    <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout" value="org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout$JTabbedPaneConstraintsDescription">
+                      <JTabbedPaneConstraints tabName="Japanese (SJIS)">
+                        <Property name="tabTitle" type="java.lang.String" value="Japanese (SJIS)"/>
+                      </JTabbedPaneConstraints>
+                    </Constraint>
+                  </Constraints>
+
+                  <Layout class="org.netbeans.modules.form.compat2.layouts.support.JScrollPaneSupportLayout"/>
+                  <SubComponents>
+                    <Component class="javax.swing.JTextArea" name="jTextAreaJapanese">
+                      <Properties>
+                        <Property name="columns" type="int" value="20"/>
+                        <Property name="lineWrap" type="boolean" value="true"/>
+                        <Property name="rows" type="int" value="5"/>
+                        <Property name="wrapStyleWord" type="boolean" value="true"/>
+                      </Properties>
+                    </Component>
+                  </SubComponents>
                 </Container>
               </SubComponents>
             </Container>

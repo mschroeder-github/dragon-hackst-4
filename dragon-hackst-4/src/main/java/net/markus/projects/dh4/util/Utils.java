@@ -201,6 +201,38 @@ public class Utils {
         return sb.toString().trim();
     }
     
+    public static String toJapanese(byte[] bytes, Map<Short, Character> sjishort2char) {
+        StringBuilder sb1 = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+        
+        
+        
+        for(int k = 0; k < bytes.length - 1; k += 2) {
+            byte[] bb = new byte[] { bytes[k], bytes[k+1] };
+            short s = Utils.bytesToShort(bb);
+            Character c = sjishort2char.get(s);
+            
+            if(c != null) {
+                sb1.append(c);
+            } else {
+                sb1.append(" ");
+            }
+        }
+        
+        for(int k = 1; k < bytes.length - 1; k += 2) {
+            byte[] bb = new byte[] { bytes[k], bytes[k+1] };
+            short s = Utils.bytesToShort(bb);
+            Character c = sjishort2char.get(s);
+            if(c != null) {
+                sb2.append(c);
+            } else {
+                sb2.append(" ");
+            }
+        }
+        
+        return sb1.toString() + "\n\n=========== shifted =================================================================================================================\n\n" + sb2.toString();
+    }
+    
     public static String toHexString(int len, int... cut) {
         byte[] array = new byte[len];
         for(int b = 0; b < len; b++) {

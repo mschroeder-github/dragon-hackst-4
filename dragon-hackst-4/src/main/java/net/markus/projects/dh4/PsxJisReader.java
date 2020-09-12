@@ -13,6 +13,8 @@ import org.apache.commons.io.IOUtils;
  */
 public class PsxJisReader {
 
+    //https://en.wikipedia.org/wiki/JIS_X_0208
+    
     public Map<Short, Character> sjishort2char;
     public Map<Character, Byte[]> char2sjis;
     

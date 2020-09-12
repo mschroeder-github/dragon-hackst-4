@@ -16,13 +16,19 @@ public class StarZerosSubBlock extends HBDBlock {
     
     public int flags1;
     
-    public int flags2;
+    //was flag2
+    public int type;
     
     public boolean compressed;
 
     @Override
     public String toString() {
-        return "StarZerosBlock{" + "size=" + size + ", sizeUncompressed=" + sizeUncompressed + ", unknown=" + unknown + ", flags1=" + flags1 + ", flags2=" + flags2 + ", compressed=" + compressed + '}';
+        return "StarZerosSubBlock{" + "path="+ getPath() + ", size=" + size + ", sizeUncompressed=" + sizeUncompressed + ", unknown=" + unknown + ", flags1=" + flags1 + ", type=" + type + ", compressed=" + compressed + '}';
     }
+    
+    public String getPath() {
+        return parent.blockIndex + "/" + blockIndex;
+    }
+    
     
 }

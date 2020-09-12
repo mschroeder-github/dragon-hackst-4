@@ -30,7 +30,7 @@ public class HBDFrame extends javax.swing.JFrame {
     private StarZerosSubBlock lastSubBlock;
 
     private BufferedImage image;
-    
+
     public HBDFrame(HBD1PS1D hbd) {
         this.hbd = hbd;
         initComponents();
@@ -44,81 +44,89 @@ public class HBDFrame extends javax.swing.JFrame {
     private void loadSubBlocks() {
 
         List<StarZerosSubBlock> list = hbd.getStarZerosSubBlocks();
-        
+
         //hbd.sortBySizeCompressed(list);
-        
         StarZerosSubBlock[] data = list.toArray(new StarZerosSubBlock[0]);
         jListSubBlocks.setListData(data);
 
         List<StarZerosSubBlock> hiraganaSubBlocksList = new ArrayList<>();
-        for(StarZerosSubBlock sb : hbd.getStarZerosSubBlocks()) {
-            if(!Utils.findHiragana(4, sb.data).isEmpty()) {
+        for (StarZerosSubBlock sb : hbd.getStarZerosSubBlocks()) {
+            if (!Utils.findHiragana(4, sb.data).isEmpty()) {
                 hiraganaSubBlocksList.add(sb);
             }
         }
-        StarZerosSubBlock[] hiraganaSubBlocks = hiraganaSubBlocksList.toArray(new StarZerosSubBlock[0]);
-        
+        //StarZerosSubBlock[] hiraganaSubBlocks = hiraganaSubBlocksList.toArray(new StarZerosSubBlock[0]);
+
         List<StarZerosSubBlock> asciiSubBlocksList = new ArrayList<>();
-        for(StarZerosSubBlock sb : hbd.getStarZerosSubBlocks()) {
-            if(!Utils.findASCII(10, sb.data, true).isEmpty()) {
+        for (StarZerosSubBlock sb : hbd.getStarZerosSubBlocks()) {
+            if (!Utils.findASCII(10, sb.data, true).isEmpty()) {
                 asciiSubBlocksList.add(sb);
             }
         }
         hbd.sortBySizeCompressed(asciiSubBlocksList);
-        StarZerosSubBlock[] asciiSubBlocks = asciiSubBlocksList.toArray(new StarZerosSubBlock[0]);
-        
-        
-        
+        //StarZerosSubBlock[] asciiSubBlocks = asciiSubBlocksList.toArray(new StarZerosSubBlock[0]);
+
         DefaultComboBoxModel<String> cbm = (DefaultComboBoxModel<String>) jComboBoxBlockFilter.getModel();
         cbm.addElement("all (" + data.length + ")");
-        
-        cbm.addElement("hiragana (" + hiraganaSubBlocks.length + ")");
-        cbm.addElement("ascii (" + asciiSubBlocks.length + ")");
+
+        cbm.addElement("hiragana (" + hiraganaSubBlocksList.size() + ")");
+        cbm.addElement("ascii (" + asciiSubBlocksList.size() + ")");
 
         jComboBoxBlockFilter.addItemListener((ItemEvent e) -> {
             String item = (String) e.getItem();
-            if(item.startsWith("all")) {
+
+            List<StarZerosSubBlock> l = null;
+
+            if (item.startsWith("all")) {
                 //set all
-                jListSubBlocks.setListData(hbd.getStarZerosSubBlocks().toArray(new StarZerosSubBlock[0]));
-            } else if(item.startsWith("type=")) {
+                l = hbd.getStarZerosSubBlocks();
+            } else if (item.startsWith("type=")) {
                 int t = Integer.parseInt(item.substring("type=".length(), item.indexOf("(")).trim());
-                jListSubBlocks.setListData(hbd.getStarZerosSubBlocks(t).toArray(new StarZerosSubBlock[0]));
-            } else if(item.startsWith("hiragana")) {
-                jListSubBlocks.setListData(hiraganaSubBlocks);
-            } else if(item.startsWith("ascii")) {
-                jListSubBlocks.setListData(asciiSubBlocks);
+                l = hbd.getStarZerosSubBlocks(t);
+            } else if (item.startsWith("hiragana")) {
+                l = hiraganaSubBlocksList;
+            } else if (item.startsWith("ascii")) {
+                l = asciiSubBlocksList;
             }
+
+            if (jCheckBoxDistinct.isSelected()) {
+                l = hbd.distinct(l);
+            }
+
+            jLabelStatus.setText("(" + l.size() + ")");
+            jListSubBlocks.setListData(l.toArray(new StarZerosSubBlock[0]));
         });
-        
+
         Map<Integer, Integer> type2count = new HashMap<>();
 
         for (StarZerosSubBlock sb : data) {
-            int count = type2count.computeIfAbsent(sb.flags2, i -> 0);
-            type2count.put(sb.flags2, count + 1);
+            int count = type2count.computeIfAbsent(sb.type, i -> 0);
+            type2count.put(sb.type, count + 1);
         }
         List<Integer> types = new ArrayList<>(type2count.keySet());
         Collections.sort(types);
         for (int type : types) {
-            
+
             float f = (type2count.get(type) / (float) data.length) * 100;
             cbm.addElement("type=" + type + " (" + type2count.get(type) + ") " + String.format(Locale.US, "%.2f%%", f));
         }
 
         jListSubBlocks.getSelectionModel().addListSelectionListener((ListSelectionEvent e) -> {
-            if(e.getValueIsAdjusting())
+            if (e.getValueIsAdjusting()) {
                 return;
-            
+            }
+
             StarZerosSubBlock sb = jListSubBlocks.getSelectedValue();
-            
-            if(sb != null) {
+
+            if (sb != null) {
                 lastSubBlock = sb;
-                
+
                 updateHexDump(sb);
                 updateImage(sb);
                 //jLabelImg.setIcon(new ImageIcon(Utils.toGrayscale(sb.data, 32, -1)));
             }
         });
-        
+
         jListSubBlocks.setCellRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -126,7 +134,7 @@ public class HBDFrame extends javax.swing.JFrame {
 
                 if (value instanceof StarZerosSubBlock) {
                     StarZerosSubBlock sb = (StarZerosSubBlock) value;
-                    lbl.setText(sb.parent.blockIndex + "/" + sb.blockIndex + " size=" + sb.size + " uncomp.size=" + sb.sizeUncompressed + " type=" + sb.flags2 + " " + (sb.compressed ? "lz" : ""));
+                    lbl.setText(sb.parent.blockIndex + "/" + sb.blockIndex + " size=" + sb.size + " uncomp.size=" + sb.sizeUncompressed + " type=" + sb.type + " " + (sb.compressed ? "lz" : ""));
                 }
 
                 return lbl;
@@ -136,59 +144,58 @@ public class HBDFrame extends javax.swing.JFrame {
     }
 
     private void updateHexDump(StarZerosSubBlock sb) {
-        if(sb == null)
+        if (sb == null) {
             return;
-        
+        }
+
         String dump = Utils.toHexDump(sb.data, (int) jSpinnerDumpWidth.getValue(), true, true, hbd.reader.sjishort2char);
         jTextAreaDump.setText(dump);
         jTextAreaDump.setCaretPosition(0);
-        
-        
-        if(sb.compressed) {
-            //try {
-                //FF7LZSInputStream lzs = new FF7LZSInputStream(new ByteArrayInputStream(sb.data));
-                byte[] uncompressed = DQLZS.decompress(sb.data, sb.sizeUncompressed); //new byte[sb.sizeUncompressed];
-                
-                //for(int i = 0; i < uncompressed.length; i++) {
-                //    uncompressed[i] = (byte) lzs.read();
-                //}
-                
-                String ud = Utils.toHexDump(uncompressed, (int) jSpinnerDumpWidth.getValue(), true, true, hbd.reader.sjishort2char);
-                jTextAreaDumpUncompressed.setText(ud);
-                jTextAreaDumpUncompressed.setCaretPosition(0);
-                
-            //} catch (IOException ex) {
-            //    throw new RuntimeException(ex);
-            //}
+
+        if (sb.compressed) {
+            byte[] uncompressed = DQLZS.decompress(sb.data, sb.sizeUncompressed).data; //new byte[sb.sizeUncompressed];
+            String ud = Utils.toHexDump(uncompressed, (int) jSpinnerDumpWidth.getValue(), true, true, hbd.reader.sjishort2char);
+            jTextAreaDumpUncompressed.setText(ud);
+            jTextAreaDumpUncompressed.setCaretPosition(0);
+            
+            jTextAreaJapanese.setText(Utils.toJapanese(uncompressed, hbd.reader.sjishort2char));
+            jTextAreaJapanese.setCaretPosition(0);
+            
+        } else {
+            jTextAreaJapanese.setText(Utils.toJapanese(sb.data, hbd.reader.sjishort2char));
+            jTextAreaJapanese.setCaretPosition(0);
+            
+            jTextAreaDumpUncompressed.setText("");
         }
     }
 
     private void updateImage(StarZerosSubBlock sb) {
         try {
             byte[] data;
-            if(sb.compressed) {
-                data = DQLZS.decompress(sb.data, sb.sizeUncompressed); //new byte[sb.sizeUncompressed];
+            if (sb.compressed) {
+                data = DQLZS.decompress(sb.data, sb.sizeUncompressed).data; //new byte[sb.sizeUncompressed];
             } else {
                 data = sb.data;
             }
-            
+
             image = Utils.toGrayscale(data, (int) jSpinnerImageWidth.getValue(), -1);
             jPanelImage.repaint();
-        } catch(Exception e) {
+        } catch (Exception e) {
             //ignore
         }
-        
+
     }
-    
+
     private void draw(Graphics g) {
-        if(image == null)
+        if (image == null) {
             return;
-        
+        }
+
         g.setColor(Color.white);
         g.fillRect(0, 0, jPanelImage.getWidth(), jPanelImage.getHeight());
         g.drawImage(image, 0, 0, image.getWidth() * 4, image.getHeight() * 4, null);
     }
-    
+
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
@@ -199,6 +206,8 @@ public class HBDFrame extends javax.swing.JFrame {
         jScrollPane1 = new javax.swing.JScrollPane();
         jListSubBlocks = new javax.swing.JList<>();
         jComboBoxBlockFilter = new javax.swing.JComboBox<>();
+        jCheckBoxDistinct = new javax.swing.JCheckBox();
+        jLabelStatus = new javax.swing.JLabel();
         jScrollPane3 = new javax.swing.JScrollPane();
         jListH60 = new javax.swing.JList<>();
         jPanel1 = new javax.swing.JPanel();
@@ -215,6 +224,8 @@ public class HBDFrame extends javax.swing.JFrame {
                 draw(g);
             }
         };
+        jScrollPane5 = new javax.swing.JScrollPane();
+        jTextAreaJapanese = new javax.swing.JTextArea();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("DQ4 Inspector");
@@ -228,22 +239,33 @@ public class HBDFrame extends javax.swing.JFrame {
         });
         jScrollPane1.setViewportView(jListSubBlocks);
 
+        jCheckBoxDistinct.setSelected(true);
+        jCheckBoxDistinct.setText("Distinct");
+
+        jLabelStatus.setText(" ");
+
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
         jPanel2Layout.setHorizontalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jComboBoxBlockFilter, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jScrollPane1)
             .addGroup(jPanel2Layout.createSequentialGroup()
-                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jComboBoxBlockFilter, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jScrollPane1))
-                .addGap(0, 0, 0))
+                .addComponent(jCheckBoxDistinct)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jLabelStatus, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addContainerGap())
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel2Layout.createSequentialGroup()
                 .addComponent(jComboBoxBlockFilter, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 442, Short.MAX_VALUE))
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jCheckBoxDistinct)
+                    .addComponent(jLabelStatus))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 421, Short.MAX_VALUE))
         );
 
         jTabbedPane1.addTab("block/subblock", jPanel2);
@@ -292,6 +314,14 @@ public class HBDFrame extends javax.swing.JFrame {
         );
 
         jTabbedPane2.addTab("Image", jPanelImage);
+
+        jTextAreaJapanese.setColumns(20);
+        jTextAreaJapanese.setLineWrap(true);
+        jTextAreaJapanese.setRows(5);
+        jTextAreaJapanese.setWrapStyleWord(true);
+        jScrollPane5.setViewportView(jTextAreaJapanese);
+
+        jTabbedPane2.addTab("Japanese (SJIS)", jScrollPane5);
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
@@ -362,7 +392,9 @@ public class HBDFrame extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JCheckBox jCheckBoxDistinct;
     private javax.swing.JComboBox<String> jComboBoxBlockFilter;
+    private javax.swing.JLabel jLabelStatus;
     private javax.swing.JList<String> jListH60;
     private javax.swing.JList<StarZerosSubBlock> jListSubBlocks;
     private javax.swing.JPanel jPanel1;
@@ -372,6 +404,7 @@ public class HBDFrame extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JScrollPane jScrollPane3;
     private javax.swing.JScrollPane jScrollPane4;
+    private javax.swing.JScrollPane jScrollPane5;
     private javax.swing.JSpinner jSpinnerDumpWidth;
     private javax.swing.JSpinner jSpinnerImageWidth;
     private javax.swing.JSplitPane jSplitPane1;
@@ -379,5 +412,6 @@ public class HBDFrame extends javax.swing.JFrame {
     private javax.swing.JTabbedPane jTabbedPane2;
     private javax.swing.JTextArea jTextAreaDump;
     private javax.swing.JTextArea jTextAreaDumpUncompressed;
+    private javax.swing.JTextArea jTextAreaJapanese;
     // End of variables declaration//GEN-END:variables
 }
