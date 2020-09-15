@@ -221,6 +221,13 @@ public class DQLZS {
         public long getDuration() {
             return end - begin;
         }
+
+        @Override
+        public String toString() {
+            return "DecompressResult{" + "data=" + data.length + ", exception=" + exception + ", begin=" + begin + ", end=" + end + ", offsetCompressed=" + offsetCompressed + ", offsetDecompressed=" + offsetDecompressed + ", offsetBuffer=" + offsetBuffer + ", stopReason=" + stopReason + '}';
+        }
+        
+        
     }
 
 }

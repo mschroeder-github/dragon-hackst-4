@@ -45,6 +45,30 @@ public class HBD1PS1D {
     
     public static final byte[] qQES = new byte[] { (byte)'q', (byte)'Q', (byte)'E', (byte)'S' };
     public static final byte[] TIM = Utils.hexStringToByteArray("10000000");
+    
+    
+    public static final List<Integer> imageTypes = Arrays.asList(
+            1, //font image
+            6, //multi image
+            8, //TIM
+            9, //gradient
+            10, //multi TIM
+            13, //sprites
+            14, //sprites
+            15, //sprites
+            17, //sprites
+            18, //sprites
+            19, //battle effects
+            25, //background texture
+            43 //sprites
+    );
+    
+    public static final List<Integer> qqesTypes = Arrays.asList(
+            20,
+            21,
+            22,
+            24
+    );
 
     public HBD1PS1D(File file) throws IOException {
         this.file = file;
