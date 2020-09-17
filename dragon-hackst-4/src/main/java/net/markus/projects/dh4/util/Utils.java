@@ -144,6 +144,26 @@ public class Utils {
         }
         return sb.toString().trim();
     }
+    
+    public static String toDecString(byte[] bytes, int... cut) {
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        int j = 0;
+        for (byte b : bytes) {
+            if (j < cut.length && i == cut[j]) {
+                j++;
+                i = 0;
+                sb.append(" | ");
+            } else {
+                sb.append(" ");
+            }
+
+            sb.append(String.format("%03d", (int)(b & 0xff)));
+
+            i++;
+        }
+        return sb.toString().trim();
+    }
 
     public static String toHexStringASCII(byte[] bytes, int... cut) {
         StringBuilder sb = new StringBuilder();

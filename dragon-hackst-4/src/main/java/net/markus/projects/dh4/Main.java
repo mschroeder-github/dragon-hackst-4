@@ -1,6 +1,8 @@
 
 package net.markus.projects.dh4;
 
+import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -8,9 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import javax.imageio.ImageIO;
 import net.markus.projects.dh4.DQLZS.DecompressResult;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
@@ -34,8 +39,11 @@ public class Main {
         //lzsEvaluation(hbd);
         //findJapaneseText(hbd);
         //findJapaneseTextV2(hbd);
+        //findJapaneseTextV3SingleByte(hbd);
+        //findJapaneseTextV3DoubleByte(hbd);
         //timExtraction(hbd);
         //veryFirstBlock(hbd);
+        //fontImages(hbd);
     }
     
     //loads data into RAM
@@ -358,6 +366,192 @@ public class Main {
         foundMap.forEach((a,b) -> System.out.println(a + " found at " + b));
     }
     
+    private static void findJapaneseTextV3SingleByte(HBD1PS1D hbd) {
+        /*
+        どうした？ <Heroname>。
+        もう降参かい？
+        そうだな。今日は　このくらいに
+        しておこう……。
+        私の役目は　はやく　お前を
+        一人前に　育てることだが
+        あせっても　しかたあるまい。
+        ちて　もどるとするか。
+        <Heroname>も　家で　ゆっくり
+        休むといいだろう。
+        勇者さま　勇者さま……。
+        勇者さま　どうか　たすけて……。
+        */
+        
+        //in search for 勇者さま　勇者さま
+        
+        List<StarZerosSubBlock> list = hbd.getStarZerosSubBlocks();
+        list.removeIf(sb -> HBD1PS1D.imageTypes.contains(sb.type) || HBD1PS1D.qqesTypes.contains(sb.type));
+        
+        list = hbd.distinct(list);
+        
+        Set<String> found = new HashSet<>();
+        
+        Map<Integer, Integer> type2count = new HashMap<>();
+        Map<String, Integer> hex2count = new HashMap<>();
+        
+        for(StarZerosSubBlock sb : list) {
+            
+            byte[] data;
+            if(sb.compressed) {
+                data = DQLZS.decompress(sb.data, sb.sizeUncompressed).data;
+            } else {
+                data = sb.data;
+            }
+            
+            System.out.println("[" + list.indexOf(sb) + "/"+list.size() + "] " + data.length + " bytes (" + found.size() + " found)");
+            
+            //０１２３４５６７８ ９  １０
+            //勇者さま　勇者さま ... ...
+            //if every letter is a byte
+            for(int i = 0; i < data.length - 15; i++) {
+                
+                if(data[i] == data[i+5] && 
+                   data[i+1] == data[i+6] &&
+                   data[i+2] == data[i+7] &&
+                   data[i+3] == data[i+8] &&
+                   data[i+9] == data[i+10] &&
+                   new HashSet<>(Arrays.asList(data[i], data[i+1], data[i+2], data[i+3])).size() == 4 &&
+                   data[i] != 0 && data[i+1] != 0 && data[i+2] != 0 && data[i+3] != 0 &&
+                        
+                   (data[i] & 0xff) > (data[i+2] & 0xff) && (data[i+1] & 0xff) > (data[i+3] & 0xff)) { //kanji > hiragana
+                    
+                    byte[] sub = Arrays.copyOfRange(data, i, i+15);
+                    
+                    found.add(Utils.toHexString(sub) + " at " + sb.getPath() + " type=" + sb.type + " at " + i);
+                    
+                    int count = type2count.computeIfAbsent(sb.type, vv -> 0);
+                    type2count.put(sb.type, count+1);
+                    
+                    String id = Utils.toDecString(sub) + " type=" + sb.type;
+                    
+                    int count2 = hex2count.computeIfAbsent(id, vv -> 0);
+                    hex2count.put(id, count2+1);
+                }
+            }
+            
+        }
+        
+        System.out.println(found.size() + " found");
+        found.forEach(f -> System.out.println(f));
+    
+        //40 maybe multi data
+        //39 has these CCC (0x00434343) patterns often
+        //46 contains error messages and japanese text
+        
+        //{40=749, 39=332, 46=239, 42=42, 44=26, 31=12, 23=18}
+        System.out.println(type2count);
+        
+        List<Entry<String, Integer>> ll = new ArrayList<>(hex2count.entrySet());
+        ll.sort(Entry.comparingByValue());
+        ll.forEach(e -> System.out.println(e));
+    }
+    
+    private static void findJapaneseTextV3DoubleByte(HBD1PS1D hbd) {
+        /*
+        どうした？ <Heroname>。
+        もう降参かい？
+        そうだな。今日は　このくらいに
+        しておこう……。
+        私の役目は　はやく　お前を
+        一人前に　育てることだが
+        あせっても　しかたあるまい。
+        ちて　もどるとするか。
+        <Heroname>も　家で　ゆっくり
+        休むといいだろう。
+        勇者さま　勇者さま……。
+        勇者さま　どうか　たすけて……。
+        */
+        
+        //in search for 勇者さま　勇者さま
+        
+        List<StarZerosSubBlock> list = hbd.getStarZerosSubBlocks();
+        list.removeIf(sb -> HBD1PS1D.imageTypes.contains(sb.type) || HBD1PS1D.qqesTypes.contains(sb.type));
+        
+        list = hbd.distinct(list);
+        
+        Set<String> found = new HashSet<>();
+        
+        Map<Integer, Integer> type2count = new HashMap<>();
+        Map<String, Integer> hex2count = new HashMap<>();
+        
+        for(StarZerosSubBlock sb : list) {
+            
+            byte[] data;
+            if(sb.compressed) {
+                data = DQLZS.decompress(sb.data, sb.sizeUncompressed).data;
+            } else {
+                data = sb.data;
+            }
+            
+            System.out.println("[" + list.indexOf(sb) + "/"+list.size() + "] " + data.length + " bytes (" + found.size() + " found)");
+            
+            //０１ ２３ ４５ ６７ ８９   10-11 12-13 14-15 16-17  18-19 20-21
+            //勇   者  さ   ま　 space  勇    者    さ     ま     ...   ...
+            //if every letter is a byte
+            for(int i = 0; i < data.length - 24; i++) {
+                
+                if(data[i+0] == data[i+10] && data[i+1] == data[i+11] &&
+                   data[i+2] == data[i+12] && data[i+3] == data[i+13] && 
+                   data[i+4] == data[i+14] && data[i+5] == data[i+15] && 
+                   data[i+6] == data[i+16] && data[i+7] == data[i+17] &&
+                   data[i+6] == data[i+16] && data[i+7] == data[i+17] &&
+                        
+                   data[i+18] == data[i+20] && data[i+19] == data[i+21] && //...
+                   (new HashSet<>(Arrays.asList(
+                           Utils.bytesToShortLE(new byte[] { data[i+0], data[i+1]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+2], data[i+3]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+4], data[i+5]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+6], data[i+7]})
+                   
+                   )).size() == 4) &&
+                        
+                   ! (Arrays.asList(
+                           Utils.bytesToShortLE(new byte[] { data[i+0], data[i+1]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+2], data[i+3]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+4], data[i+5]}),
+                           Utils.bytesToShortLE(new byte[] { data[i+6], data[i+7]})
+                   
+                   ).contains((short)0))
+                        
+                        
+                        ) { 
+                    
+                    byte[] sub = Arrays.copyOfRange(data, i, i+24);
+                    
+                    found.add(Utils.toHexString(sub) + " at " + sb.getPath() + " type=" + sb.type + " at " + i);
+                    
+                    int count = type2count.computeIfAbsent(sb.type, vv -> 0);
+                    type2count.put(sb.type, count+1);
+                    
+                    String id = Utils.toDecString(sub) + " | " + Utils.toHexString(sub, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2) + " type=" + sb.type;
+                    
+                    int count2 = hex2count.computeIfAbsent(id, vv -> 0);
+                    hex2count.put(id, count2+1);
+                }
+            }
+            
+        }
+        
+        System.out.println(found.size() + " found");
+        found.forEach(f -> System.out.println(f));
+    
+        //40 maybe multi data
+        //39 has these CCC (0x00434343) patterns often
+        //46 contains error messages and japanese text
+        
+        //{40=749, 39=332, 46=239, 42=42, 44=26, 31=12, 23=18}
+        System.out.println(type2count);
+        
+        List<Entry<String, Integer>> ll = new ArrayList<>(hex2count.entrySet());
+        ll.sort(Entry.comparingByValue());
+        ll.forEach(e -> System.out.println(e));
+    }
+    
     private static void timExtraction(HBD1PS1D hbd) throws IOException {
         
         File folder = new File("TIMs");
@@ -462,5 +656,60 @@ public class Main {
             System.out.println();
             System.out.println(charset + ": " + text);
         }
+    }
+    
+    private static void fontImages(HBD1PS1D hbd) throws IOException {
+        
+        File folder = new File("fontImages");
+        folder.mkdir();
+        
+        StarZerosSubBlock sb = hbd.getSubBlock(26023, 1);
+        
+        int l = sb.data.length;
+        int w = 128;
+        int h = l / w;
+        
+        System.out.println(sb.data.length);
+        
+        System.out.println(Utils.toHexDump(sb.data, w, true, false, null));
+        
+        BufferedImage img1 = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        
+        Set<Integer> values = new HashSet<>();
+        
+        Map<Integer, Integer> value2count = new HashMap<>();
+        
+        //byte[] decomp = DQLZS.decompress(sb.data, 10000).data;
+        
+        for(int i = 0; i < h; i++) {
+            for(int j = 0; j < w; j++) {
+                
+                int index = i * w + j;
+                byte b = sb.data[i * w + j];
+                int v = b & 0xff;
+                String hex = Utils.bytesToHex(new byte[] { b });
+                
+                System.out.println("[" + index + "]" + " - " + hex + " - " + v);
+                
+                int count = value2count.computeIfAbsent(v, vv -> 0);
+                value2count.put(v, count+1);
+                
+                if(v != 0) {
+                    int a = 0;
+                }
+                
+                values.add(v);
+                
+                img1.setRGB(j, i, new Color(v,v,v).getRGB());
+            }
+        }
+        
+        System.out.println(values);
+
+        //List<Entry<Integer, Integer>> ll = new ArrayList<>(value2count.entrySet());
+        //ll.sort(Entry.comparingByValue());
+        //ll.forEach(e -> System.out.println(e));
+        
+        ImageIO.write(img1, "png", new File(folder, "01.png"));
     }
 }
