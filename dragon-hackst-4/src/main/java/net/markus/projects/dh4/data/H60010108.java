@@ -29,6 +29,11 @@ public class H60010108 extends HBDBlock {
     public String toString() {
         return "H60010108{" + "index=" + index + ", count=" + count + ", part=" + part + ", v12to16=" + v12to16 + ", v16to18=" + v16to18 + ", v18to20=" + v18to20 + ", v20to22=" + v20to22 + '}';
     }
+
+    @Override
+    public void write() {
+        
+    }
     
     
 }

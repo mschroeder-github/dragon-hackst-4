@@ -56,6 +56,22 @@ public class Utils {
         return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getShort();
     }
 
+    public static byte[] intToByteArrayLE(int value) {
+        return new byte[]{
+            (byte) value,
+            (byte) (value >>> 8),
+            (byte) (value >>> 16),
+            (byte) (value >>> 24)
+        };
+    }
+    
+    public static byte[] shortToByteArrayLE(int value) {
+        return new byte[]{
+            (byte) value,
+            (byte) (value >>> 8)
+        };
+    }
+
     public static byte[] shortToBytes(short value) {
         return ByteBuffer.allocate(2).order(ByteOrder.BIG_ENDIAN).putShort(value).array();
     }
@@ -126,6 +142,10 @@ public class Utils {
     }
 
     public static String toHexString(byte[] bytes, int... cut) {
+        if(bytes == null) {
+            return "null";
+        }
+        
         StringBuilder sb = new StringBuilder();
         int i = 0;
         int j = 0;
@@ -144,7 +164,7 @@ public class Utils {
         }
         return sb.toString().trim();
     }
-    
+
     public static String toDecString(byte[] bytes, int... cut) {
         StringBuilder sb = new StringBuilder();
         int i = 0;
@@ -158,7 +178,7 @@ public class Utils {
                 sb.append(" ");
             }
 
-            sb.append(String.format("%03d", (int)(b & 0xff)));
+            sb.append(String.format("%03d", (int) (b & 0xff)));
 
             i++;
         }

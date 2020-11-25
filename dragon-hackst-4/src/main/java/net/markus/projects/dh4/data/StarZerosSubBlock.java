@@ -29,6 +29,11 @@ public class StarZerosSubBlock extends HBDBlock {
     public String getPath() {
         return parent.blockIndex + "/" + blockIndex;
     }
+
+    @Override
+    public void write() {
+    
+    }
     
     
 }

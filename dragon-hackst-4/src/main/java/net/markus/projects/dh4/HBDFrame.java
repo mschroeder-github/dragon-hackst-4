@@ -17,6 +17,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.event.ListSelectionEvent;
+import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
 import net.markus.projects.dh4.util.Utils;
 
@@ -39,6 +40,8 @@ public class HBDFrame extends javax.swing.JFrame {
         jSpinnerDumpWidth.setValue(16);
         jSpinnerImageWidth.setValue(32);
         loadSubBlocks();
+        
+        loadH60Blocks();
     }
 
     private void loadSubBlocks() {
@@ -142,7 +145,38 @@ public class HBDFrame extends javax.swing.JFrame {
 
         });
     }
+    
+    private void loadH60Blocks() {
+        List<H60010108> list = hbd.getH60010108List();
+        
+        H60010108[] data = list.toArray(new H60010108[0]);
+        jListH60.setListData(data);
+        
+        jListH60.getSelectionModel().addListSelectionListener((ListSelectionEvent e) -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
 
+            H60010108 sb = jListH60.getSelectedValue();
+
+            if (sb != null) {
+                
+                updateHexDump(sb);
+                updateImage(sb);
+                //jLabelImg.setIcon(new ImageIcon(Utils.toGrayscale(sb.data, 32, -1)));
+            }
+        });
+    }
+
+    private void updateHexDump(H60010108 h60) {
+        
+        //byte[] uncompressed = DQLZS.decompress(h60.data, h60.v20to22).data;
+        
+        String dump = Utils.toHexDump(h60.data, (int) jSpinnerDumpWidth.getValue(), true, true, hbd.reader.sjishort2char);
+        jTextAreaDump.setText(dump);
+        jTextAreaDump.setCaretPosition(0);
+    }
+    
     private void updateHexDump(StarZerosSubBlock sb) {
         if (sb == null) {
             return;
@@ -169,6 +203,11 @@ public class HBDFrame extends javax.swing.JFrame {
         }
     }
 
+    private void updateImage(H60010108 h60) {
+        image = Utils.toGrayscale(h60.data, (int) jSpinnerImageWidth.getValue(), -1);
+        jPanelImage.repaint();
+    }
+    
     private void updateImage(StarZerosSubBlock sb) {
         try {
             byte[] data;
@@ -395,7 +434,7 @@ public class HBDFrame extends javax.swing.JFrame {
     private javax.swing.JCheckBox jCheckBoxDistinct;
     private javax.swing.JComboBox<String> jComboBoxBlockFilter;
     private javax.swing.JLabel jLabelStatus;
-    private javax.swing.JList<String> jListH60;
+    private javax.swing.JList<H60010108> jListH60;
     private javax.swing.JList<StarZerosSubBlock> jListSubBlocks;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
