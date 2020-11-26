@@ -85,7 +85,9 @@ public class Main {
     private static void printBlocks(HBD1PS1D hbd) {
         
         //found only in 26046/13
-        byte[] pattern = Utils.hexStringToByteArray("61806380658067806980E708C609");
+        //byte[] pattern = Utils.hexStringToByteArray("61806380658067806980E708C609");
+        //26046/13
+        byte[] pattern = Utils.hexStringToByteArray("6B00C808");//C808EA08B202 780B6C0D510E700E
         
         List<StarZerosSubBlock> matched = new ArrayList<>();
         
@@ -95,10 +97,10 @@ public class Main {
             if(block instanceof StarZeros) {
                 StarZeros sz = (StarZeros) block;
                 
-                System.out.println(sz.blockIndex);
+                //System.out.println(sz.blockIndex);
                 
                 for(StarZerosSubBlock sb : sz.starZerosBlocks) {
-                    System.out.println("\t" + sb + " " + HBD1PS1D.getTypeName(sb.type));
+                    //System.out.println("\t" + sb + " " + HBD1PS1D.getTypeName(sb.type));
                     
                     List<Integer> l = Utils.find(pattern, sb.data);
                     
@@ -167,17 +169,43 @@ public class Main {
     }
     
     private static void analyseTextBlocks(HBD1PS1D hbd) {
-        //hbd.maybeTextBlockExtraction(types);
-        //hbd.textBlockAnalysis();
+        //is the first scene text
+        /*
+        //TextBlock tb = hbd.getTextBlock(26046, 13);
         
-        //seems to be first scene text
-        TextBlock tb = hbd.getTextBlock(26046, 13);
+        //here starts the first dialog but skip 1 bit
+        List<Integer> p = Utils.find(Utils.hexStringToByteArray("F38CD759ECADFA2C44"), tb.dataCE);
+        //found it
+        byte[] range = Arrays.copyOfRange(tb.dataCE, 474, 474 + 10);
+        System.out.println(Utils.bytesToHex(range));
+        */
+        
+        TextBlock tb = hbd.textBlocks.get(0);
         System.out.println(tb);
         
-        System.out.println(Utils.toHexDump(tb.dataCE, 8, true, false, null));
+        //System.out.println(Utils.toHexDump(tb.dataCE, 8, true, false, null));
+        //System.out.println(Utils.toHexDump(tb.subBlock.data, 8, true, false, null));
+        //dictionary
+        //System.out.println(Utils.toHexDump(tb.huffmanTreeBytes, 8, true, false, null));
         
-        hbd.textBlockTreeExtractionV2(tb);
+        //1001111 => ど
         
+        String allbits = "";
+        for(byte b : tb.huffmanCode) {
+            //for each byte take the bits
+            String bits = Utils.toBits(b);
+            //reverse it
+            bits = Utils.reverse(bits);
+            //add it to long bit sequence
+            allbits += bits;
+        }
+        
+        //allbits = allbits.substring(1);
+        
+        System.out.println(allbits);
+        
+        String str = hbd.decode(allbits, tb.huffmanTreeBytes);
+        System.out.println(str);
     }
     
     //mass decompression: check if everything works

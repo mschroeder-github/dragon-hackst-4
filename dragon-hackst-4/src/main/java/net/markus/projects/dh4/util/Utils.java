@@ -64,7 +64,7 @@ public class Utils {
             (byte) (value >>> 24)
         };
     }
-    
+
     public static byte[] shortToByteArrayLE(int value) {
         return new byte[]{
             (byte) value,
@@ -142,10 +142,10 @@ public class Utils {
     }
 
     public static String toHexString(byte[] bytes, int... cut) {
-        if(bytes == null) {
+        if (bytes == null) {
             return "null";
         }
-        
+
         StringBuilder sb = new StringBuilder();
         int i = 0;
         int j = 0;
@@ -484,6 +484,10 @@ public class Utils {
             i++;
         }
         return result;
+    }
+    
+    public static String reverse(String str) {
+        return new StringBuilder(str).reverse().toString();
     }
 
 }

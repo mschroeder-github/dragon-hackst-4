@@ -25,8 +25,8 @@ public class TextBlock {
     public int f;
     
     public byte[] dataHeaderToCE;
-    public byte[] dataCE;
-    public byte[] dataED; //tree data
+    public byte[] huffmanCode;
+    public byte[] huffmanTreeBytes; //tree data
     public byte[] dataDA;
     
     public ParseNode root;
@@ -66,7 +66,7 @@ public class TextBlock {
 
     @Override
     public String toString() {
-        return "TextBlock{" + "subBlock=" + subBlock + ", a=" + a + ", b=" + b + ", c=" + c + ", d=" + d + ", e=" + e + ", f=" + f + ", dataHeaderToCE=" + dataHeaderToCE.length + ", dataCE=" + dataCE.length + ", dataED=" + dataED.length + ", dataDA=" + dataDA.length + ", e1=" + e1 + ", e2=" + e2 + ", e3=" + e3 + ", atA=" + atA + ", atAnext=" + atAnext + ", dataAtA=" + dataAtA.length + '}';
+        return "TextBlock{" + "subBlock=" + subBlock + ", a=" + a + ", b=" + b + ", c=" + c + ", d=" + d + ", e=" + e + ", f=" + f + ", dataHeaderToCE=" + dataHeaderToCE.length + ", dataCE=" + huffmanCode.length + ", dataED=" + huffmanTreeBytes.length + ", dataDA=" + dataDA.length + ", e1=" + e1 + ", e2=" + e2 + ", e3=" + e3 + ", atA=" + atA + ", atAnext=" + atAnext + ", dataAtA=" + dataAtA.length + '}';
     }
     
     public void write() throws IOException {
@@ -80,14 +80,14 @@ public class TextBlock {
         baos.write(Utils.intToByteArrayLE(f));
         
         baos.write(dataHeaderToCE);
-        baos.write(dataCE);
+        baos.write(huffmanCode);
         
         //two ints here
         baos.write(Utils.intToByteArrayLE(e1));
         baos.write(Utils.intToByteArrayLE(e2));
         baos.write(Utils.shortToByteArrayLE(e3));
         
-        baos.write(dataED);
+        baos.write(huffmanTreeBytes);
         baos.write(dataDA);
         
         baos.write(Utils.intToByteArrayLE(atA));

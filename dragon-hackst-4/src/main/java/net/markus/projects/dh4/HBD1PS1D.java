@@ -84,7 +84,6 @@ public class HBD1PS1D {
     public static final List<Integer> dq7TextTypes = Arrays.asList(23, 24, 25, 27);
     public static final List<Integer> dq4TextTypes = Arrays.asList(40, 42);
 
-
     public HBD1PS1D(File file) throws IOException {
         this.file = file;
 
@@ -681,7 +680,7 @@ public class HBD1PS1D {
                 tb.dataHeaderToCE = Arrays.copyOfRange(sb.data, 24, tb.c);
 
                 //copy
-                tb.dataCE = Arrays.copyOfRange(sb.data, tb.c, tb.e);
+                tb.huffmanCode = Arrays.copyOfRange(sb.data, tb.c, tb.e);
 
                 //if d is zero there is no extra range, so use a for it
                 if (tb.d == 0) {
@@ -690,7 +689,7 @@ public class HBD1PS1D {
 
                 if (tb.d != 0) {
                     //two ints and a short = +10
-                    tb.dataED = Arrays.copyOfRange(sb.data, tb.e + 10, tb.d);
+                    tb.huffmanTreeBytes = Arrays.copyOfRange(sb.data, tb.e + 10, tb.d);
                 }
                 if (tb.d != 0) {
                     tb.dataDA = Arrays.copyOfRange(sb.data, tb.d, tb.a);
@@ -716,7 +715,7 @@ public class HBD1PS1D {
             }
         }
 
-        textBlocks.sort((a, b) -> Integer.compare(a.dataED.length, b.dataED.length));
+        textBlocks.sort((a, b) -> Integer.compare(a.huffmanTreeBytes.length, b.huffmanTreeBytes.length));
 
         /*
         int lastLength = 0;
@@ -732,10 +731,12 @@ public class HBD1PS1D {
 
             lastLength = tb.dataED.length;
         }
-        */
+         */
     }
 
     //a huffman tree entry to node
+    //deprecated: use decode
+    @Deprecated
     private ParseNode toParseNode(byte[] entry) {
 
         byte[] entryCopy = new byte[]{entry[0], entry[1]};
@@ -787,9 +788,9 @@ public class HBD1PS1D {
         return null;
 
     }
-    
+
     public void textBlockTreeExtraction(TextBlock tb) {
-        byte[] dataED = tb.dataED;
+        byte[] dataED = tb.huffmanTreeBytes;
 
         Stack<ParseNode> stack = new Stack<>();
         Queue<ParseNode> queue = new LinkedList<>();
@@ -907,12 +908,12 @@ public class HBD1PS1D {
         tb.stack = stack;
         tb.queue = queue;
     }
-    
+
     public void textBlockTreeExtractionV2(TextBlock tb) {
-        byte[] dataED = tb.dataED;
+        byte[] dataED = tb.huffmanTreeBytes;
 
         ParseNode root = new ParseNode("root", "root");
-        
+
         Queue<ParseNode> q = new LinkedList<>();
         q.add(root);
 
@@ -920,21 +921,21 @@ public class HBD1PS1D {
         //for (int i = 0; i < dataED.length; i += 2) {
         for (int i = dataED.length - 2; i >= 0; i -= 2) {
 
-            byte[] entry = new byte[]{dataED[i+1], dataED[i]};
-            
+            byte[] entry = new byte[]{dataED[i + 1], dataED[i]};
+
             ParseNode pn = toParseNode(entry);
-            
+
             int index = (((dataED.length - 2) - i) / 2);
             //int index = (i / 2) + 1;
-            
+
             System.out.println(index + " " + pn);
-            
-            if(pn != null && pn.getLabel().equals("node")) {
+
+            if (pn != null && pn.getLabel().equals("node")) {
                 int number = Integer.parseInt(pn.getCoveredText());
                 //System.out.println("\tleft child: " + ((number * 2) + 2));
                 //System.out.println("\tright child: " + ((number * 2) + 3));
             }
-            
+
             /*
             ParseNode node = q.peek();
             
@@ -963,13 +964,101 @@ public class HBD1PS1D {
                 //q.remove();
                 q.remove();
             }
-            */
-            
+             */
+        }
+
+        System.out.println(root.toStringTree());
+
+        tb.root = root;
+    }
+
+    public String decode(String bits, byte[] huffmanTreeBytes) {
+        boolean print = false;
+        
+        StringBuilder sb = new StringBuilder();
+
+        int lastNodeIndex = huffmanTreeBytes.length - 4;
+        byte[] lastNode2Bytes = Arrays.copyOfRange(huffmanTreeBytes, lastNodeIndex, lastNodeIndex + 2);
+        int lastNode = Utils.bytesToInt(new byte[]{0, 0, lastNode2Bytes[1], lastNode2Bytes[0]});
+        int lastNodeNumber = lastNode - 0x8000;
+
+        int root = lastNodeNumber + 1;
+        
+        int offsetA = 0;
+        //to get the second tree part
+        int offsetB = (int) ((huffmanTreeBytes.length + 2) / 2) - 2;
+        
+        //======================================================================
+        
+        int bitIndex = 0;
+        int curNumber = root;
+        
+        if(print) {
+            System.out.println("start with: " + curNumber);
         }
         
-        System.out.println(root.toStringTree());
+        while (true) {
+            
+            if(bitIndex >= bits.length()) {
+                break;
+            }
+            
+            int offset = 0;
+            //bit decide what offset is used
+            if(bits.charAt(bitIndex) == '0') {
+               offset = offsetA;
+            } else {
+               offset = offsetB;
+            }
+            
+            if(print) {
+                System.out.println("bit[" + bitIndex + "] = " + bits.charAt(bitIndex) + " => offset: " + offset);
+            }
+            
+            bitIndex++;
+            
+            int index = offset + curNumber * 2; //offset + shift left (r3 or r6 is used in assembler code)
+
+            byte[] nodeBytes = Arrays.copyOfRange(huffmanTreeBytes, index, index + 2);
+            byte[] swap = new byte[]{nodeBytes[1], nodeBytes[0]};
+            String hex = Utils.bytesToHex(swap);
+            
+            if(print) {
+                System.out.println("\twill jump to " + hex);
+            }
+            
+            if (hex.startsWith("8")) {
+
+                curNumber = Utils.bytesToInt(new byte[]{0, 0, nodeBytes[1], nodeBytes[0]}) - 0x8000;
+
+            } else if (hex.startsWith("7")) { 
+            
+                if(print)
+                    System.out.println("\t7f Leaf: " + hex);
+                
+                if(hex.equals("7f02")) {
+                    sb.append("\n");
+                } else {
+                    sb.append("{"+hex+"}");
+                }
+                
+                curNumber = root;
+                
+            } else {
+                swap[0] = (byte) (swap[0] + (byte) 0x80);
+                short s = Utils.bytesToShort(swap);
+                Character c = reader.sjishort2char.get(s);
+                sb.append(c);
+                
+                if(print)
+                    System.out.println("\tLeaf: " + hex + " " + c);
+                
+                curNumber = root;
+            }
+        }
         
-        tb.root = root;
+        
+        return sb.toString();
     }
 
     public void textBlockAnalysis() {
@@ -978,14 +1067,14 @@ public class HBD1PS1D {
         boolean inDeep = false;
         boolean printMoreOfMatched = false;
         boolean search = false;
-        
+
         int lastSize = 0;
 
         List<TextBlock> matched = new ArrayList<>();
 
         for (TextBlock tb : textBlocks) {
 
-            if (skipSameSize && lastSize == tb.dataED.length) {
+            if (skipSameSize && lastSize == tb.huffmanTreeBytes.length) {
                 continue;
             }
 
@@ -996,11 +1085,11 @@ public class HBD1PS1D {
             if (printMore) {
                 System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
                 System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToCE));
-                System.out.println("c-e:" + Utils.toHexString(tb.dataCE));
+                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
                 System.out.println("e1:" + tb.e1);
                 System.out.println("e2:" + tb.e2);
                 System.out.println("e3:" + tb.e3);
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.dataED));
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
                 System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
                 System.out.println("at a:" + Utils.toHexString(tb.dataAtA));
             }
@@ -1008,7 +1097,6 @@ public class HBD1PS1D {
             //for (int i = 0; i < tb.dataCE.length; i++) {
             //    dataStat.add((int) tb.dataCE[i] & 0xff);
             //}
-
             //works (they are offsets)
             if (tb.c > tb.subBlock.data.length
                     || tb.d > tb.subBlock.data.length
@@ -1017,8 +1105,8 @@ public class HBD1PS1D {
             }
 
             //it always ends with 0x8* ** (a branch)
-            if (!Utils.bytesToHex(new byte[]{tb.dataED[tb.dataED.length - 3]}).startsWith("8")) {
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.dataED));
+            if (!Utils.bytesToHex(new byte[]{tb.huffmanTreeBytes[tb.huffmanTreeBytes.length - 3]}).startsWith("8")) {
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
                 throw new RuntimeException("no branch at the end");
             }
 
@@ -1071,14 +1159,13 @@ public class HBD1PS1D {
             if (tb.e == 0) {
                 eIs0++;
             }
-            */
-            
+             */
             //always a mulitple of 4
-            if (!(tb.dataCE.length % 4 == 0)) {
+            if (!(tb.huffmanCode.length % 4 == 0)) {
                 throw new RuntimeException("tb.dataCE.length % 4 == 0");
             }
-            
-            lastSize = tb.dataED.length;
+
+            lastSize = tb.huffmanTreeBytes.length;
 
             int a = 0;
         }
@@ -1089,11 +1176,11 @@ public class HBD1PS1D {
                 System.out.println("MATCH found:");
                 System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
                 System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToCE));
-                System.out.println("c-e:" + Utils.toHexString(tb.dataCE));
+                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
                 System.out.println("e1:" + tb.e1);
                 System.out.println("e2:" + tb.e2);
                 System.out.println("e3:" + tb.e3);
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.dataED));
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
                 System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
                 System.out.println("at a:" + Utils.toHexString(tb.dataAtA));
             }
@@ -1101,10 +1188,9 @@ public class HBD1PS1D {
 
         int a = 0;
     }
-    
+
     //==========================================================================
     //getter and helper
-    
     public static String getTypeName(int type) {
         if (imageTypes.contains(type)) {
             return "Image";
@@ -1117,7 +1203,7 @@ public class HBD1PS1D {
         }
         return "Unknown";
     }
-    
+
     public List<StarZerosSubBlock> getStarZerosSubBlocks() {
         List<StarZerosSubBlock> l = new ArrayList<>();
         for (StarZeros sz : starZerosList) {
@@ -1180,14 +1266,14 @@ public class HBD1PS1D {
 
     public TextBlock getTextBlock(int blockIndex, int subBlockIndex) {
         StarZerosSubBlock sb = getSubBlock(blockIndex, subBlockIndex);
-        for(TextBlock tb : textBlocks) {
-            if(tb.subBlock == sb) {
+        for (TextBlock tb : textBlocks) {
+            if (tb.subBlock == sb) {
                 return tb;
             }
         }
         return null;
     }
-    
+
     public void sortBySizeCompressed(List<StarZerosSubBlock> l) {
         l.sort((a, b) -> {
 
@@ -1220,7 +1306,6 @@ public class HBD1PS1D {
 
     //==========================================================================
     //write
-    
     //call this before write() method
     //updates the writeThisBlock
     public void updateBlocks() {
@@ -1250,5 +1335,4 @@ public class HBD1PS1D {
         }
     }
 
-    
 }
