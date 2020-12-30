@@ -23,6 +23,10 @@ public class DQFiles {
     public File cnfFile;
     public File writeHbdFile;
     
+    //for translation
+    public File translationFolderWrite;
+    public File translationFolderRead;
+    
     //psxbuild
     public File catFile;
     public File sysFile;
@@ -58,6 +62,9 @@ public class DQFiles {
         files.exeFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/SLPM_869.16");
         files.cnfFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/SYSTEM.CNF");
         files.writeHbdFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/HBD1PS1D.Q41.patched");
+        
+        files.translationFolderWrite = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation");
+        files.translationFolderRead = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation_test");
         
         //psxbuild
         files.catFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip.cat");
@@ -121,7 +128,7 @@ public class DQFiles {
         //the three files in the patched folder (working dir)
         FileUtils.writeStringToFile(newCatFile, newCatSB.toString(), StandardCharsets.UTF_8);
         FileUtils.copyFile(cnfFile, new File(tmpFolder, cnfFile.getName()));
-        FileUtils.copyFile(exeFile, new File(tmpFolder, exeFile.getName()));
+        //FileUtils.copyFile(exeFile, new File(tmpFolder, exeFile.getName()));
         FileUtils.deleteQuietly(new File(tmpFolder,hbdFileName));
         FileUtils.moveFile(writeHbdFile, new File(tmpFolder, hbdFileName));
         

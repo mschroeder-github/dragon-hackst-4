@@ -1,5 +1,6 @@
 package net.markus.projects.dh4.data;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -10,10 +11,11 @@ public class ParseNode {
     private String coveredText;
     private String label;
     
-    public ParseNode left;
-    public ParseNode right;
-    
+    //original data
     public byte[] data;
+    
+    //for huffman tree calculation
+    public int freq;
 
     public ParseNode() {
         this.children = new LinkedList<>();
@@ -23,20 +25,6 @@ public class ParseNode {
         this();
         this.coveredText = coveredText;
         this.label = label;
-    }
-    
-    public void setLeft(ParseNode left) {
-        if(left != null) {
-            this.left = left;
-            getChildren().add(left);
-        }
-    }
-    
-    public void setRight(ParseNode right) {
-        if(right != null) {
-            this.right = right;
-            getChildren().add(right);
-        }
     }
     
     /**
@@ -79,6 +67,27 @@ public class ParseNode {
             return null;
         children.remove(pn);
         return pn;
+    }
+    
+    public List<ParseNode> descendants() {
+        List<ParseNode> l = new ArrayList<>();
+        l.add(this);
+        if(hasChildren()) {
+            for(ParseNode child : getChildren()) {
+                l.addAll(child.descendants());
+            }
+        }
+        return l;
+    }
+    
+    public List<ParseNode> descendantsWithoutThis() {
+        List<ParseNode> l = new ArrayList<>();
+        if(hasChildren()) {
+            for(ParseNode child : getChildren()) {
+                l.addAll(child.descendants());
+            }
+        }
+        return l;
     }
     
     public boolean hasChildren() {

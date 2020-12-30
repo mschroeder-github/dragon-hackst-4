@@ -4,13 +4,17 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.event.ItemEvent;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import static java.util.stream.Collectors.toList;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JLabel;
@@ -20,6 +24,7 @@ import javax.swing.event.ListSelectionEvent;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
 import net.markus.projects.dh4.util.Utils;
+import org.apache.commons.io.FileUtils;
 
 /**
  *
@@ -74,10 +79,15 @@ public class HBDFrame extends javax.swing.JFrame {
 
         cbm.addElement("hiragana (" + hiraganaSubBlocksList.size() + ")");
         cbm.addElement("ascii (" + asciiSubBlocksList.size() + ")");
+        cbm.addElement("first scene");
 
         jComboBoxBlockFilter.addItemListener((ItemEvent e) -> {
             String item = (String) e.getItem();
 
+            if(item.equals("search")) {
+                return;
+            }
+            
             List<StarZerosSubBlock> l = null;
 
             if (item.startsWith("all")) {
@@ -90,6 +100,8 @@ public class HBDFrame extends javax.swing.JFrame {
                 l = hiraganaSubBlocksList;
             } else if (item.startsWith("ascii")) {
                 l = asciiSubBlocksList;
+            } else if (item.startsWith("first scene")) {
+                l = list.stream().filter(sb -> sb.parent.blockIndex == 26046).collect(toList());
             }
 
             if (jCheckBoxDistinct.isSelected()) {
@@ -235,6 +247,30 @@ public class HBDFrame extends javax.swing.JFrame {
         g.drawImage(image, 0, 0, image.getWidth() * 4, image.getHeight() * 4, null);
     }
 
+    private void search(String hex) {
+        byte[] pattern = Utils.hexStringToByteArray(hex);
+        
+        List<StarZerosSubBlock> l = new ArrayList<>();
+        for(int i = 0; i < jListSubBlocks.getModel().getSize(); i++) {
+            StarZerosSubBlock sb = jListSubBlocks.getModel().getElementAt(i);
+            
+            byte[] searchIn;
+            if (sb.compressed) {
+                searchIn = DQLZS.decompress(sb.data, sb.sizeUncompressed).data;
+            } else {
+                searchIn = sb.data;
+            }
+            
+            List<Integer> found = Utils.find(pattern, searchIn);
+            if(!found.isEmpty()) {
+                l.add(sb);
+            }
+        }
+        
+        jLabelStatus.setText("(" + l.size() + ")");
+        jListSubBlocks.setListData(l.toArray(new StarZerosSubBlock[0]));
+    }
+    
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
@@ -247,6 +283,8 @@ public class HBDFrame extends javax.swing.JFrame {
         jComboBoxBlockFilter = new javax.swing.JComboBox<>();
         jCheckBoxDistinct = new javax.swing.JCheckBox();
         jLabelStatus = new javax.swing.JLabel();
+        jButtonSave = new javax.swing.JButton();
+        jTextFieldSearch = new javax.swing.JTextField();
         jScrollPane3 = new javax.swing.JScrollPane();
         jListH60 = new javax.swing.JList<>();
         jPanel1 = new javax.swing.JPanel();
@@ -283,6 +321,20 @@ public class HBDFrame extends javax.swing.JFrame {
 
         jLabelStatus.setText(" ");
 
+        jButtonSave.setFont(new java.awt.Font("Dialog", 1, 10)); // NOI18N
+        jButtonSave.setText("Save");
+        jButtonSave.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButtonSaveActionPerformed(evt);
+            }
+        });
+
+        jTextFieldSearch.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyPressed(java.awt.event.KeyEvent evt) {
+                jTextFieldSearchKeyPressed(evt);
+            }
+        });
+
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
         jPanel2Layout.setHorizontalGroup(
@@ -293,7 +345,10 @@ public class HBDFrame extends javax.swing.JFrame {
                 .addComponent(jCheckBoxDistinct)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jLabelStatus, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButtonSave)
                 .addContainerGap())
+            .addComponent(jTextFieldSearch)
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -302,9 +357,12 @@ public class HBDFrame extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jCheckBoxDistinct)
-                    .addComponent(jLabelStatus))
+                    .addComponent(jLabelStatus)
+                    .addComponent(jButtonSave))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 421, Short.MAX_VALUE))
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 480, Short.MAX_VALUE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jTextFieldSearch, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
 
         jTabbedPane1.addTab("block/subblock", jPanel2);
@@ -349,7 +407,7 @@ public class HBDFrame extends javax.swing.JFrame {
         );
         jPanelImageLayout.setVerticalGroup(
             jPanelImageLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 434, Short.MAX_VALUE)
+            .addGap(0, 526, Short.MAX_VALUE)
         );
 
         jTabbedPane2.addTab("Image", jPanelImage);
@@ -424,6 +482,34 @@ public class HBDFrame extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_jSpinnerImageWidthStateChanged
 
+    private void jButtonSaveActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonSaveActionPerformed
+        
+        StarZerosSubBlock subBlock = jListSubBlocks.getSelectedValue();
+        
+        if(subBlock == null) {
+            return;
+        }
+        
+        File f = new File(hbd.file.getParentFile(), subBlock.parent.blockIndex + "-" + subBlock.blockIndex + ".bin");
+        
+        byte[] data = subBlock.data;
+        if (subBlock.compressed) {
+            data = DQLZS.decompress(data, subBlock.sizeUncompressed).data;
+        }
+        
+        try {
+            FileUtils.writeByteArrayToFile(f, data);
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+    }//GEN-LAST:event_jButtonSaveActionPerformed
+
+    private void jTextFieldSearchKeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jTextFieldSearchKeyPressed
+        if(evt.getKeyCode() == KeyEvent.VK_ENTER) {
+            search(jTextFieldSearch.getText());
+        }
+    }//GEN-LAST:event_jTextFieldSearchKeyPressed
+
     public static void showGUI(HBD1PS1D hbd1ps1d) {
         java.awt.EventQueue.invokeLater(() -> {
             new HBDFrame(hbd1ps1d).setVisible(true);
@@ -431,6 +517,7 @@ public class HBDFrame extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton jButtonSave;
     private javax.swing.JCheckBox jCheckBoxDistinct;
     private javax.swing.JComboBox<String> jComboBoxBlockFilter;
     private javax.swing.JLabel jLabelStatus;
@@ -452,5 +539,6 @@ public class HBDFrame extends javax.swing.JFrame {
     private javax.swing.JTextArea jTextAreaDump;
     private javax.swing.JTextArea jTextAreaDumpUncompressed;
     private javax.swing.JTextArea jTextAreaJapanese;
+    private javax.swing.JTextField jTextFieldSearch;
     // End of variables declaration//GEN-END:variables
 }

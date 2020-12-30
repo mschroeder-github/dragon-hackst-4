@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -21,6 +22,8 @@ import net.markus.projects.dh4.DQLZS.DecompressResult;
 import net.markus.projects.dh4.data.DQFiles;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.HBDBlock;
+import net.markus.projects.dh4.data.HuffmanChar;
+import net.markus.projects.dh4.data.HuffmanCode;
 import net.markus.projects.dh4.data.StarZeros;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
 import net.markus.projects.dh4.data.TextBlock;
@@ -37,15 +40,18 @@ public class Main {
     public static void main(String[] args) throws Exception {
         //shiftjisToHex();
         
-        boolean writePatch = false;
+        boolean writePatch = true;
         DQFiles dqFiles = DQFiles.dq4();
         
         HBD1PS1D hbd = load(dqFiles.readHbdFile);
+        PSEXE psexe = psxexe(dqFiles);
         
-        analyseTextBlocks(hbd);
+        //inspectWithGUI(hbd);
+        //translationPreparation(hbd, dqFiles);
+        translationEmbedding(hbd, psexe, dqFiles);
+        //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //analyseTextBlocks(hbd);
-        //inspectWithGUI(hbd);
         //h60010108Blocks(hbd);
         //lzsEvaluation(hbd);
         //timExtraction(hbd);
@@ -53,11 +59,27 @@ public class Main {
         //fontImages(hbd);
         
         if(writePatch) {
+            updateBlocks(hbd);
             save(hbd, dqFiles.writeHbdFile);
+            
+            dqFiles.patchedFolder.mkdirs();
+            System.out.println("mkdir " + dqFiles.patchedFolder);
+            
+            File patchedPsexe = new File(new File(dqFiles.patchedFolder, dqFiles.name), dqFiles.exeFile.getName());
+            System.out.println("write psexe to " + patchedPsexe);
+            psexe.save(patchedPsexe);
 
             File psxbuildBin = new File("../../tools/psximager-master/psximager-master/src/psxbuild");
             psxbuild(dqFiles, psxbuildBin);
         }
+    }
+    
+    private static PSEXE psxexe(DQFiles dqFiles) throws IOException {
+        PSEXE psexe = new PSEXE(dqFiles.exeFile, "80017F00");
+        
+        //psexe.patch();
+        
+        return psexe;
     }
     
     //loads data into RAM
@@ -136,11 +158,9 @@ public class Main {
         
         //this updates the linked sub-blocks in data attribute
         //but does not update the main-blocks
+        
         hbd.textBlocks.forEach(tb -> {
             try {
-                //we do the change only here
-                //tb.changeDataCE();
-                
                 //updates sub-block data
                 tb.write();
             } catch (IOException ex) {
@@ -169,10 +189,59 @@ public class Main {
     }
     
     private static void analyseTextBlocks(HBD1PS1D hbd) {
-        //is the first scene text
-        /*
-        //TextBlock tb = hbd.getTextBlock(26046, 13);
         
+        Map<Integer, List<TextBlock>> id2tb = new HashMap<>();
+        
+        int lastLen = 0;
+        
+        Set<Integer> ids = new HashSet<>();
+        for(TextBlock tb : hbd.textBlocks) {
+            
+            if(lastLen == tb.endOffset) {
+                continue;
+            }
+            
+            //the ones with the dataDA.length == 0 are lists of things: city names, or 男, no new line, just separated by {0000}
+            /*
+            if(tb.dataDA.length != 0) {
+                System.out.println(tb);
+                
+                String str = hbd.decodeToString(hbd.getBits(tb.huffmanCode), tb.root);
+                System.out.println(str);
+                
+                
+                System.out.println(Utils.toHexDump(tb.dataDA, 8, true, false, null));
+                System.out.println("===================");
+            }
+            */
+            
+            lastLen = tb.endOffset;
+            
+            id2tb.computeIfAbsent(tb.id, bb -> new ArrayList<>()).add(tb);
+            
+            
+            //if(ids.contains(tb.b)) {
+            //    throw new RuntimeException("id duplicate in " + tb);
+            //}
+            
+            ids.add(tb.id);
+        }
+        
+        //works
+        for(Entry<Integer, List<TextBlock>> e : id2tb.entrySet()) {
+            
+            int sz = e.getValue().get(0).endOffset;
+            
+            for(TextBlock tb : e.getValue()) {
+                if(tb.endOffset != sz) {
+                    throw new RuntimeException("other end offset");
+                }
+            }
+        }
+        
+        //is the first scene text
+        TextBlock tb = hbd.getTextBlock(26046, 13);
+        /*
         //here starts the first dialog but skip 1 bit
         List<Integer> p = Utils.find(Utils.hexStringToByteArray("F38CD759ECADFA2C44"), tb.dataCE);
         //found it
@@ -180,8 +249,94 @@ public class Main {
         System.out.println(Utils.bytesToHex(range));
         */
         
-        TextBlock tb = hbd.textBlocks.get(0);
-        System.out.println(tb);
+        //System.out.println(Utils.toHexDump(tb.dataDA, 8, true, false, null));
+        
+        //26046/13 has id 108
+        
+        //r9 = 4518D94D
+        //r9 = 0518D94E @800F4E40
+        //TextPointer tp = new TextPointer("4518D94D");
+        //System.out.println(tp);
+        
+        //TextBlock tb = hbd.textBlocks.get(0);
+        //System.out.println(tb);
+        //System.out.println(tb.root.toStringTree());
+        
+        //8018D780 start of first scene huffman code
+        String s = "8018D780";
+        BigInteger start = new BigInteger(s, 16);
+        
+        HuffmanCode code = hbd.decode(hbd.getBits(tb.huffmanCode), tb.root);
+        //System.out.println(code.getText());
+        
+        
+        
+        for(HuffmanChar hc : code) {
+            
+            String addr = start.add(new BigInteger(String.valueOf(hc.getByteIndex()))).toString(16).toUpperCase();
+            
+            String bitIndex = new BigInteger("" + hc.getStartBitInByte()).toString(16);
+            
+            String pointer = addr.substring(6,8) + addr.substring(4,6) + addr.substring(2,4) + bitIndex + "5";
+            
+            
+            System.out.println(code.indexOf(hc) + " " + hc + " " + pointer
+            );
+            
+            if(hc.isControlZero()) {
+                System.out.println();
+            }
+        }
+        
+        /*
+        @800F4E40=5AD91815
+        @800F4E40=47D91815
+        @800F4E40=09D91865
+        */
+        
+        //634 ？ 1100110 0x4801 @3815-3821|477 (5);
+        HuffmanChar otherChar = new HuffmanChar("日");
+        //7f02 => scrolls down
+        //code.set(630, otherChar);
+        //code.set(631, otherChar);
+        //code.add(609, otherChar);
+        //code.add(609, otherChar);
+        /*
+        code.set(633, otherChar);
+        code.set(639, otherChar);
+        code.set(640, otherChar);
+        code.set(641, otherChar);
+        code.set(642, otherChar);
+        code.set(643, otherChar);
+        code.set(644, otherChar);
+        code.set(645, otherChar);
+        */
+        
+        for(HuffmanChar hc : code) {
+            System.out.println(code.indexOf(hc) + " " + hc);
+        }
+        
+        byte[] encoded = hbd.encode(code);
+        
+        //int cmp = Utils.compare(encoded, tb.huffmanCode);
+        
+        tb.huffmanCode = encoded;
+        
+        /*
+        for(TextBlock tb2 : hbd.textBlocks) {
+            try {
+                tb2.write();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+        */
+        
+        //int a = 0;
+        
+        //System.out.println("tree 1");
+        //ParseNode root = hbd.parseTree(tb.huffmanTreeBytes);
+        //System.out.println(root.toStringTree());
         
         //System.out.println(Utils.toHexDump(tb.dataCE, 8, true, false, null));
         //System.out.println(Utils.toHexDump(tb.subBlock.data, 8, true, false, null));
@@ -190,6 +345,7 @@ public class Main {
         
         //1001111 => ど
         
+        /*
         String allbits = "";
         for(byte b : tb.huffmanCode) {
             //for each byte take the bits
@@ -199,13 +355,50 @@ public class Main {
             //add it to long bit sequence
             allbits += bits;
         }
+        */
         
         //allbits = allbits.substring(1);
         
-        System.out.println(allbits);
+        //System.out.println(allbits);
+        //String str = hbd.decode(allbits, tb.huffmanTreeBytes);
+        //System.out.println(str);
         
-        String str = hbd.decode(allbits, tb.huffmanTreeBytes);
-        System.out.println(str);
+        //System.out.println("== with tree ===========================");
+        
+        //byte[] huffmanTreeBytes = hbd.toHuffmanTreeBytes(root);
+        
+        //for(int i = 0; i < huffmanTreeBytes.length; i += 2) {
+        //    String left = Utils.bytesToHex(Arrays.copyOfRange(tb.huffmanTreeBytes, i, i + 2));
+        //    String right = Utils.bytesToHex(Arrays.copyOfRange(huffmanTreeBytes, i, i + 2));
+        //    System.out.println("[" + i + "] " + left + hbd);
+        //}
+        
+        //System.out.println("tree 2");
+        //ParseNode root2 = hbd.parseTree(huffmanTreeBytes);
+        //System.out.println(root2.toStringTree());
+        
+        //System.out.println("tree 3");
+        //ParseNode root3 = hbd.parseTree(hbd.toHuffmanTreeBytes(root2));
+        //System.out.println(root3.toStringTree());
+        
+        //String str2 = hbd.decode(allbits, root2);
+        //System.out.println(str2);
+        
+        //System.out.println("=================");
+        
+        //String str = hbd.decode(allbits, huffmanTreeBytes);
+        //System.out.println(str);
+        
+        //tb.huffmanTreeBytes = huffmanTreeBytes;
+    }
+    
+    private static void translationPreparation(HBD1PS1D hbd, DQFiles dqFiles) throws IOException {
+        hbd.translationPreparation(dqFiles.translationFolderWrite);
+    }
+    
+    private static void translationEmbedding(HBD1PS1D hbd, PSEXE psexe, DQFiles dqFiles) throws IOException {
+        TranslationEmbedding embedding = new TranslationEmbedding();
+        embedding.embed(dqFiles.translationFolderRead, hbd, psexe);
     }
     
     //mass decompression: check if everything works

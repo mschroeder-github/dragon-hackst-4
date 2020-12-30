@@ -64,6 +64,15 @@ public class Utils {
             (byte) (value >>> 24)
         };
     }
+    
+    public static byte[] intToByteArray(int value) {
+        return new byte[]{
+            (byte) (value >>> 24),
+            (byte) (value >>> 16),
+            (byte) (value >>> 8),
+            (byte) value
+        };
+    }
 
     public static byte[] shortToByteArrayLE(int value) {
         return new byte[]{
@@ -101,6 +110,8 @@ public class Utils {
     }
 
     public static byte[] hexStringToByteArray(String s) {
+        s = s.replace(" ", "");
+        
         int len = s.length();
         byte[] data = new byte[len / 2];
         for (int i = 0; i < len; i += 2) {
@@ -488,6 +499,26 @@ public class Utils {
     
     public static String reverse(String str) {
         return new StringBuilder(str).reverse().toString();
+    }
+    
+    /**
+     * -1 means it is equal, an index >= 0 means the bytes are different there, -2
+     * means length is different.
+     * @param a
+     * @param b
+     * @return 
+     */
+    public static int compare(byte[] a, byte[] b) {
+        if(a.length != b.length) {
+            return -2;
+        }
+        
+        for(int i = 0; i < a.length; i++) {
+            if(a[i] != b[i]) {
+                return i;
+            }
+        }
+        return -1;
     }
 
 }

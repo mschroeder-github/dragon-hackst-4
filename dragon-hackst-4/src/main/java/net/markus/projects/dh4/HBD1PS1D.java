@@ -3,19 +3,20 @@ package net.markus.projects.dh4;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
+import java.util.Map.Entry;
 import java.util.Set;
-import java.util.Stack;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.HBDBlock;
+import net.markus.projects.dh4.data.HuffmanChar;
+import net.markus.projects.dh4.data.HuffmanCode;
 import net.markus.projects.dh4.data.ParseNode;
 import net.markus.projects.dh4.data.StarZeros;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
@@ -23,6 +24,8 @@ import net.markus.projects.dh4.data.TextBlock;
 import net.markus.projects.dh4.data.VeryFirstBlock;
 import net.markus.projects.dh4.util.MinAvgMaxSdDouble;
 import net.markus.projects.dh4.util.Utils;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.io.FileUtils;
 
 /**
@@ -656,6 +659,9 @@ public class HBD1PS1D {
         //}
     }
 
+    //========================================================
+    //text block
+    
     //extracts text blocks and also call tree extraction
     public void textBlockExtraction(List<Integer> types) {
         textBlocks = new ArrayList<>();
@@ -667,49 +673,53 @@ public class HBD1PS1D {
                 tb.subBlock = sb;
 
                 //tb.dataSize1 = Arrays.copyOfRange(sb.data, 8, 8+tb.a);
-                tb.a = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 0, 0 + 4));
-                tb.b = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 4, 4 + 4));
-                tb.c = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 8, 8 + 4)); //header size = 4 * 6 bytes
-                tb.d = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 12, 12 + 4));
-                tb.e = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 16, 16 + 4));
-                tb.f = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 20, 20 + 4));
+                tb.endOffset = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 0, 0 + 4));
+                tb.id = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 4, 4 + 4));
+                tb.huffmanCodeStart = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 8, 8 + 4)); //header size = 4 * 6 bytes
+                tb.huffmanTreeBytesEnd = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 12, 12 + 4));
+                tb.huffmanCodeEnd = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 16, 16 + 4));
+                tb.dataHeaderToHuffmanCodeStart = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, 20, 20 + 4));
 
                 tb.header = Arrays.copyOfRange(sb.data, 0, 24);
 
                 //if c is larger than 24 this can happen
-                tb.dataHeaderToCE = Arrays.copyOfRange(sb.data, 24, tb.c);
+                tb.dataHeaderToHuffmanCode = Arrays.copyOfRange(sb.data, 24, tb.huffmanCodeStart);
 
                 //copy
-                tb.huffmanCode = Arrays.copyOfRange(sb.data, tb.c, tb.e);
+                tb.huffmanCode = Arrays.copyOfRange(sb.data, tb.huffmanCodeStart, tb.huffmanCodeEnd);
 
                 //if d is zero there is no extra range, so use a for it
-                if (tb.d == 0) {
-                    tb.d = tb.a;
+                int internalD = tb.huffmanTreeBytesEnd;
+                
+                if (internalD == 0) {
+                    internalD = tb.endOffset;
                 }
 
-                if (tb.d != 0) {
+                if (internalD != 0) {
                     //two ints and a short = +10
-                    tb.huffmanTreeBytes = Arrays.copyOfRange(sb.data, tb.e + 10, tb.d);
+                    tb.huffmanTreeBytes = Arrays.copyOfRange(sb.data, tb.huffmanCodeEnd + 10, internalD);
                 }
-                if (tb.d != 0) {
-                    tb.dataDA = Arrays.copyOfRange(sb.data, tb.d, tb.a);
+                if (internalD != 0) {
+                    tb.dataDA = Arrays.copyOfRange(sb.data, internalD, tb.endOffset);
                 }
 
                 //the two (or three) ints at e and e+4
-                tb.e1 = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.e, tb.e + 4));
-                tb.e2 = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.e + 4, tb.e + 8));
-                tb.e3 = Utils.bytesToShortLE(Arrays.copyOfRange(sb.data, tb.e + 8, tb.e + 10));
+                tb.huffmanTreeBytesStart = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.huffmanCodeEnd, tb.huffmanCodeEnd + 4));
+                tb.huffmanTreeBytesMiddle = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.huffmanCodeEnd + 4, tb.huffmanCodeEnd + 8));
+                tb.numberOfNodes = Utils.bytesToShortLE(Arrays.copyOfRange(sb.data, tb.huffmanCodeEnd + 8, tb.huffmanCodeEnd + 10));
 
                 //at the end
-                tb.atA = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.a, tb.a + 4));
-                tb.atAnext = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.a + 4, tb.a + 8));
+                tb.atEndOffset = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.endOffset, tb.endOffset + 4));
+                tb.numberOfDataEndBlocks = Utils.bytesToIntLE(Arrays.copyOfRange(sb.data, tb.endOffset + 4, tb.endOffset + 8));
 
                 //atAnext is a number and we have to read number * 8 bytes
-                tb.dataAtA = new byte[tb.atAnext * 8];
-                for (int i = 0; i < tb.dataAtA.length; i++) {
+                tb.dataEnd = new byte[tb.numberOfDataEndBlocks * 8];
+                for (int i = 0; i < tb.dataEnd.length; i++) {
                     //+8 : jump over atA (int) and atAnext (int)
-                    tb.dataAtA[i] = tb.subBlock.data[tb.a + 8 + i];
+                    tb.dataEnd[i] = tb.subBlock.data[tb.endOffset + 8 + i];
                 }
+                
+                tb.root = parseTree(tb.huffmanTreeBytes);
 
                 textBlocks.add(tb);
             }
@@ -734,245 +744,225 @@ public class HBD1PS1D {
          */
     }
 
-    //a huffman tree entry to node
-    //deprecated: use decode
-    @Deprecated
-    private ParseNode toParseNode(byte[] entry) {
+    //make file so translators can translate
+    public void translationPreparation(File translationFolder) throws IOException {
+        translationFolder.mkdirs();
+        
+        Map<String, List<TextBlock>> id2tb = getTextBlockIDMap();
+        System.out.println(id2tb.size() + " unique textblocks found");
+        
+        
+        for (Entry<String, List<TextBlock>> e : id2tb.entrySet()) {
+            String idHex = e.getKey();
+            
+            
 
-        byte[] entryCopy = new byte[]{entry[0], entry[1]};
-
-        int b = (entry[0] & 0xff);
-        int b2 = (entry[1] & 0xff);
-
-        String hex = Utils.toHexString(entry);
-
-        int full = Utils.bytesToInt(new byte[]{0, 0, entry[0], entry[1]});
-
-        if (b == 0) {
-
-            //ParseNode zeroBlock = new ParseNode("0", "0");
-            //if((i/2) != (dataED.length/2) - 1) {
-            //    stack.push(zeroBlock);
+            //JSONArray textBlocksJsonArray = new JSONArray();
+            //for(TextBlock tb : e.getValue()) {
+            //    textBlocksJsonArray.put(tb.subBlock.getPath());
             //}
-            return null;
+            
+            TextBlock tb = e.getValue().get(0);
+            
+            HuffmanCode code = decode(getBits(tb.huffmanCode), tb.root);
+            
+            //cut the code in segments
+            List<HuffmanCode> segments = new ArrayList<>();
+            HuffmanCode currentSegment = new HuffmanCode();
+            for (HuffmanChar hc : code) {
 
-        } else if (b == 127) {
-            //0x7f pointer
+                currentSegment.add(hc);
 
-            ParseNode special7f = new ParseNode("" + b2, "0x7f");
-            special7f.data = entry;
-
-            return special7f;
-
-        } else if (!hex.startsWith("8")) {
-
-            //jp letter
-            entryCopy[0] = (byte) (entryCopy[0] + (byte) 0x80);
-
-            short s = Utils.bytesToShort(entryCopy);
-            Character c = reader.sjishort2char.get(s);
-
-            String jp = "" + c;
-
-            ParseNode leaf = new ParseNode(jp, "leaf");
-
-            return leaf;
-
-        } else if (hex.startsWith("8")) {
-            //0x8* number
-
-            ParseNode node = new ParseNode("" + (full - 0x8000), "node");
-            return node;
-        }
-
-        return null;
-
-    }
-
-    public void textBlockTreeExtraction(TextBlock tb) {
-        byte[] dataED = tb.huffmanTreeBytes;
-
-        Stack<ParseNode> stack = new Stack<>();
-        Queue<ParseNode> queue = new LinkedList<>();
-
-        boolean print = true;
-
-        for (int i = 0; i < dataED.length; i += 2) {
-            //0x80 is left
-            byte[] entry = new byte[]{dataED[i + 1], dataED[i]};
-            byte[] entryCopy = new byte[]{dataED[i + 1], dataED[i]};
-
-            String hex = Utils.toHexString(entry);
-
-            String jp = "";
-            String status = "";
-
-            int b = (entry[0] & 0xff);
-            int b2 = (entry[1] & 0xff);
-
-            int full = Utils.bytesToInt(new byte[]{0, 0, entry[0], entry[1]});
-
-            //127 = 0x80
-            if (b == 0) {
-
-                //ParseNode zeroBlock = new ParseNode("0", "0");
-                //if((i/2) != (dataED.length/2) - 1) {
-                //    stack.push(zeroBlock);
-                //}
-            } else if (b == 127) {
-                //0x7f pointer
-
-                status = "special 0x7f";
-
-                ParseNode special7f = new ParseNode("" + b2, "0x7f");
-                special7f.data = entry;
-                stack.push(special7f);
-
-                queue.add(special7f);
-
-            } else if (!hex.startsWith("8")) {
-
-                //jp letter
-                entryCopy[0] = (byte) (entryCopy[0] + (byte) 0x80);
-
-                short s = Utils.bytesToShort(entryCopy);
-                Character c = reader.sjishort2char.get(s);
-
-                jp = "" + c;
-
-                ParseNode leaf = new ParseNode(jp, "leaf");
-                leaf.data = entry;
-                stack.push(leaf);
-
-                queue.add(leaf);
-
-            } else if (hex.startsWith("8")) {
-                //0x8* pointer
-
-                status = "node " + (full - 0x8000);
-
-                ParseNode node = new ParseNode("" + (full - 0x8000), "node");
-
-                //for(int j = 0; j < 2 && !stack.isEmpty();j++) {
-                //    ParseNode child = stack.pop();
-                //    node.getChildren().add(child);
-                //}
-                for (int j = 0; j < 2 && !queue.isEmpty(); j++) {
-                    ParseNode child = queue.remove();
-                    node.getChildren().add(child);
-                }
-
-                if (!node.hasChildren()) {
-                    throw new RuntimeException("no children?");
-                }
-
-                stack.push(node);
-
-                queue.add(node);
-
-                /*
-                if(stack.size() >= 2) {
-                    ParseNode child1 = stack.pop();
-                    ParseNode child2 = stack.pop();
+                if (hc.isControlZero()) {
+                    segments.add(currentSegment);
                     
-                    node.getChildren().add(child1);
-                    node.getChildren().add(child2);
-                    stack.push(node);
-                } else {
+                    int firstByteIndex = currentSegment.get(0).getByteIndex();
+                    //add textblock header length, usually 24 (directly after header starts huffman code)
+                    firstByteIndex += tb.huffmanCodeStart;
                     
-                    //stack.push(node);
+                    //if(tb.huffmanCodeStart != 24) {
+                        //happens
+                    //}
                     
-                    if(print) {
-                        System.out.println("\t\t ERROR: stack.size:" + stack.size());
+                    String offsetHex = Utils.bytesToHex(Utils.intToByteArray(firstByteIndex)).toUpperCase();
+                    if(!offsetHex.startsWith("0000")) {
+                        throw new RuntimeException("the offsetHex is greater then a short: " + offsetHex);
                     }
-                    int a = 0;
+                    offsetHex = offsetHex.substring(4, 8);
+                    
+                    currentSegment.setByteDiffInHex(offsetHex);
+                    
+                    currentSegment.setText(currentSegment.calculateText());
+                    
+                    currentSegment = new HuffmanCode();
                 }
-                 */
-            } else {
-                //no other
-                throw new RuntimeException("unknown escape sequence");
             }
+            
+            //segments that are just the remaining without a {0000}
+            //TODO maybe better check
+            segments.removeIf(seg -> seg.size() <= 2);
+            
+            //ダミー = dummy
+            segments.removeIf(seg -> seg.getText().startsWith("ダミー"));
+            
+            if(!segments.isEmpty()) {
+                //so that the dialogs are sorted like they appear
+                Collections.reverse(segments);
+                
+                File translationFile = new File(translationFolder, idHex + ".csv");
+                CSVPrinter csvp = CSVFormat.DEFAULT.print(translationFile, StandardCharsets.UTF_8);
 
-            if (print) {
-                System.out.println("\t" + (i / 2) + "/" + (dataED.length / 2) + ": " + hex + " " + jp + " " + status);
+                for(HuffmanCode segment : segments) {
+                    csvp.printRecord(
+                            "", //translation
+                            segment.getText(), //original
+
+                            //"ID" + idHex, //id of the textblock
+                            "0x" + segment.getByteDiffInHex() //byte diff
+                            //textBlocksJsonArray.toString() //so that we know what textblocks we have to update
+                    );
+                }
+
+                csvp.close();
             }
-        }
-
-        if (print) {
-            System.out.println("QUEUE based:");
-            for (ParseNode root : queue) {
-                System.out.println(root.toStringTree());
-            }
-        }
-
-        tb.stack = stack;
-        tb.queue = queue;
+            
+        }//for each unique textblock id 
     }
+    
+    //just analysis
+    @Deprecated
+    public void textBlockAnalysis() {
+        boolean skipSameSize = true;
+        boolean printMore = false;
+        boolean inDeep = false;
+        boolean printMoreOfMatched = false;
+        boolean search = false;
 
-    public void textBlockTreeExtractionV2(TextBlock tb) {
-        byte[] dataED = tb.huffmanTreeBytes;
+        int lastSize = 0;
 
-        ParseNode root = new ParseNode("root", "root");
+        List<TextBlock> matched = new ArrayList<>();
 
-        Queue<ParseNode> q = new LinkedList<>();
-        q.add(root);
+        for (TextBlock tb : textBlocks) {
 
-        //for (int i = 1; i < tree.length; i++) {
-        //for (int i = 0; i < dataED.length; i += 2) {
-        for (int i = dataED.length - 2; i >= 0; i -= 2) {
+            if (skipSameSize && lastSize == tb.huffmanTreeBytes.length) {
+                continue;
+            }
 
-            byte[] entry = new byte[]{dataED[i + 1], dataED[i]};
+            //int diff = tb.subBlock.size - tb.a;
+            //diffs.add(diff);
+            System.out.println(tb);
 
-            ParseNode pn = toParseNode(entry);
+            if (printMore) {
+                System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
+                System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToHuffmanCode));
+                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
+                System.out.println("e1:" + tb.huffmanTreeBytesStart);
+                System.out.println("e2:" + tb.huffmanTreeBytesMiddle);
+                System.out.println("e3:" + tb.numberOfNodes);
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
+                System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
+                System.out.println("at a:" + Utils.toHexString(tb.dataEnd));
+            }
 
-            int index = (((dataED.length - 2) - i) / 2);
-            //int index = (i / 2) + 1;
+            //for (int i = 0; i < tb.dataCE.length; i++) {
+            //    dataStat.add((int) tb.dataCE[i] & 0xff);
+            //}
+            //works (they are offsets)
+            if (tb.huffmanCodeStart > tb.subBlock.data.length
+                    || tb.huffmanTreeBytesEnd > tb.subBlock.data.length
+                    || tb.huffmanCodeEnd > tb.subBlock.data.length) {
+                throw new RuntimeException("offset are bigger than data len");
+            }
 
-            System.out.println(index + " " + pn);
+            //it always ends with 0x8* ** (a branch)
+            if (!Utils.bytesToHex(new byte[]{tb.huffmanTreeBytes[tb.huffmanTreeBytes.length - 3]}).startsWith("8")) {
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
+                throw new RuntimeException("no branch at the end");
+            }
 
-            if (pn != null && pn.getLabel().equals("node")) {
-                int number = Integer.parseInt(pn.getCoveredText());
-                //System.out.println("\tleft child: " + ((number * 2) + 2));
-                //System.out.println("\tright child: " + ((number * 2) + 3));
+            List<Integer> p = null;
+            if (search) {
+                if (!p.isEmpty()) {
+                    matched.add(tb);
+                }
+            }
+
+            //works (c < e)
+            if (tb.huffmanCodeStart >= tb.huffmanCodeEnd) {
+                System.out.println(Utils.toHexDump(tb.subBlock.data, 8, true, false, null));
+
+                throw new RuntimeException("c >= e");
+            }
+
+            //works: it is always the same
+            if (tb.endOffset != tb.atEndOffset) {
+                throw new RuntimeException("tb.a != tb.atA");
+            }
+
+            //c < e < d
+            if (!(tb.huffmanTreeBytesEnd == 0 || tb.huffmanCodeStart < tb.huffmanCodeEnd && tb.huffmanCodeEnd < tb.huffmanTreeBytesEnd)) {
+                throw new RuntimeException("not c < e < d (when d != 0)");
+            }
+
+            //works
+            if (!(tb.huffmanTreeBytesStart < tb.huffmanTreeBytesMiddle)) {
+                throw new RuntimeException("not tb.e1 < tb.e2");
+            }
+
+            //works it is in fact the end
+            if (!(tb.subBlock.data.length == tb.endOffset + 8 + tb.numberOfDataEndBlocks * 8)) {
+                throw new RuntimeException("is not the end: tb.subBlock.data.length == tb.a + 8 + tb.atAnext * 8)");
             }
 
             /*
-            ParseNode node = q.peek();
-            
-            if(node == null) {
-                continue;
+            //never 0
+            if (tb.c == 0) {
+                cIs0++;
             }
-            
-            if (node.left == null) {
-                
-                //node.left = new TreeNode(tree[i]);
-                node.setLeft(pn);
-                
-                //if (tree[i] != null) q.add(node.left);
-                if(node.left != null && !node.left.getLabel().equals("leaf"))
-                    q.add(node.left);
 
-            } else if (node.right == null) {
+            //191 times its zero
+            if (tb.d == 0) {
+                dIs0++;
+            }
 
-                //node.right = new TreeNode(tree[i]);
-                node.setRight(pn);
-                
-                //if (tree[i] != null) q.add(node.right);
-                if(node.right != null && !node.right.getLabel().equals("leaf"))
-                    q.add(node.right);
-                
-                //q.remove();
-                q.remove();
+            //never 0
+            if (tb.e == 0) {
+                eIs0++;
             }
              */
+            //always a mulitple of 4
+            if (!(tb.huffmanCode.length % 4 == 0)) {
+                throw new RuntimeException("tb.dataCE.length % 4 == 0");
+            }
+
+            lastSize = tb.huffmanTreeBytes.length;
+
+            int a = 0;
         }
 
-        System.out.println(root.toStringTree());
+        System.out.println(matched.size() + " matched");
+        for (TextBlock tb : matched) {
+            if (printMoreOfMatched) {
+                System.out.println("MATCH found:");
+                System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
+                System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToHuffmanCode));
+                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
+                System.out.println("e1:" + tb.huffmanTreeBytesStart);
+                System.out.println("e2:" + tb.huffmanTreeBytesMiddle);
+                System.out.println("e3:" + tb.numberOfNodes);
+                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
+                System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
+                System.out.println("at a:" + Utils.toHexString(tb.dataEnd));
+            }
+        }
 
-        tb.root = root;
+        int a = 0;
     }
-
-    public String decode(String bits, byte[] huffmanTreeBytes) {
+    
+    //first version with byte
+    //deprecated: use decode with ParseNode huffmanTreeRoot
+    @Deprecated
+    public String decodeToString(String bits, byte[] huffmanTreeBytes) {
         boolean print = false;
         
         StringBuilder sb = new StringBuilder();
@@ -1060,135 +1050,464 @@ public class HBD1PS1D {
         
         return sb.toString();
     }
-
-    public void textBlockAnalysis() {
-        boolean skipSameSize = true;
-        boolean printMore = false;
-        boolean inDeep = false;
-        boolean printMoreOfMatched = false;
-        boolean search = false;
-
-        int lastSize = 0;
-
-        List<TextBlock> matched = new ArrayList<>();
-
-        for (TextBlock tb : textBlocks) {
-
-            if (skipSameSize && lastSize == tb.huffmanTreeBytes.length) {
-                continue;
+    
+    //second version with tree, use parseTree method
+    public String decodeToString(String bits, ParseNode huffmanTreeRoot) {
+        StringBuilder sb = new StringBuilder();
+        
+        ParseNode node = huffmanTreeRoot;
+        for(int i = 0; i < bits.length(); i++) {
+            
+            char c = bits.charAt(i);
+            
+            if(c == '0') {
+                node = node.getChild(0);
+            } else {
+                node = node.getChild(1);
             }
-
-            //int diff = tb.subBlock.size - tb.a;
-            //diffs.add(diff);
-            System.out.println(tb);
-
-            if (printMore) {
-                System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
-                System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToCE));
-                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
-                System.out.println("e1:" + tb.e1);
-                System.out.println("e2:" + tb.e2);
-                System.out.println("e3:" + tb.e3);
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
-                System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
-                System.out.println("at a:" + Utils.toHexString(tb.dataAtA));
-            }
-
-            //for (int i = 0; i < tb.dataCE.length; i++) {
-            //    dataStat.add((int) tb.dataCE[i] & 0xff);
-            //}
-            //works (they are offsets)
-            if (tb.c > tb.subBlock.data.length
-                    || tb.d > tb.subBlock.data.length
-                    || tb.e > tb.subBlock.data.length) {
-                throw new RuntimeException("offset are bigger than data len");
-            }
-
-            //it always ends with 0x8* ** (a branch)
-            if (!Utils.bytesToHex(new byte[]{tb.huffmanTreeBytes[tb.huffmanTreeBytes.length - 3]}).startsWith("8")) {
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
-                throw new RuntimeException("no branch at the end");
-            }
-
-            List<Integer> p = null;
-            if (search) {
-                if (!p.isEmpty()) {
-                    matched.add(tb);
+            
+            if(node.getLabel().equals("literal")) {
+                sb.append(node.getCoveredText());
+                
+                node = huffmanTreeRoot;
+                
+            } else if(node.getLabel().equals("control")) {
+                if(node.getCoveredText().equals("7f02")) {
+                    sb.append("\n");
+                } else {
+                    sb.append("{"+node.getCoveredText()+"}");
                 }
-            }
-
-            //works (c < e)
-            if (tb.c >= tb.e) {
-                System.out.println(Utils.toHexDump(tb.subBlock.data, 8, true, false, null));
-
-                throw new RuntimeException("c >= e");
-            }
-
-            //works: it is always the same
-            if (tb.a != tb.atA) {
-                throw new RuntimeException("tb.a != tb.atA");
-            }
-
-            //c < e < d
-            if (!(tb.d == 0 || tb.c < tb.e && tb.e < tb.d)) {
-                throw new RuntimeException("not c < e < d (when d != 0)");
-            }
-
-            //works
-            if (!(tb.e1 < tb.e2)) {
-                throw new RuntimeException("not tb.e1 < tb.e2");
-            }
-
-            //works it is in fact the end
-            if (!(tb.subBlock.data.length == tb.a + 8 + tb.atAnext * 8)) {
-                throw new RuntimeException("is not the end: tb.subBlock.data.length == tb.a + 8 + tb.atAnext * 8)");
-            }
-
-            /*
-            //never 0
-            if (tb.c == 0) {
-                cIs0++;
-            }
-
-            //191 times its zero
-            if (tb.d == 0) {
-                dIs0++;
-            }
-
-            //never 0
-            if (tb.e == 0) {
-                eIs0++;
-            }
-             */
-            //always a mulitple of 4
-            if (!(tb.huffmanCode.length % 4 == 0)) {
-                throw new RuntimeException("tb.dataCE.length % 4 == 0");
-            }
-
-            lastSize = tb.huffmanTreeBytes.length;
-
-            int a = 0;
-        }
-
-        System.out.println(matched.size() + " matched");
-        for (TextBlock tb : matched) {
-            if (printMoreOfMatched) {
-                System.out.println("MATCH found:");
-                System.out.println(Utils.toHexDump(tb.subBlock.data, 24, true, false, null));
-                System.out.println("header to c-e:" + Utils.toHexString(tb.dataHeaderToCE));
-                System.out.println("c-e:" + Utils.toHexString(tb.huffmanCode));
-                System.out.println("e1:" + tb.e1);
-                System.out.println("e2:" + tb.e2);
-                System.out.println("e3:" + tb.e3);
-                System.out.println("e(+10)-d:" + Utils.toHexString(tb.huffmanTreeBytes));
-                System.out.println("d-a:" + Utils.toHexString(tb.dataDA));
-                System.out.println("at a:" + Utils.toHexString(tb.dataAtA));
+                
+                node = huffmanTreeRoot;
             }
         }
+        
+        return sb.toString();
+    }
+    
+    public String getBits(byte[] huffmanCode) {
+        String allbits = "";
+        for(byte b : huffmanCode) {
+            //for each byte take the bits
+            String bits = Utils.toBits(b);
+            //reverse it
+            bits = Utils.reverse(bits);
+            //add it to long bit sequence
+            allbits += bits;
+        }
+        return allbits;
+    }
+    
+    public HuffmanCode decode(String bits, ParseNode huffmanTreeRoot) {
+        HuffmanCode code = new HuffmanCode();
+        code.setHuffmanTreeRoot(huffmanTreeRoot);
+        
+        StringBuilder sb = new StringBuilder();
+        
+        ParseNode node = huffmanTreeRoot;
+        String bitBuffer = "";
+        
+        int startBit = 0;
+        
+        for(int i = 0; i < bits.length(); i++) {
+            
+            char bit = bits.charAt(i);
+            
+            if(bit == '0') {
+                node = node.getChild(0);
+            } else {
+                node = node.getChild(1);
+            }
+            
+            bitBuffer += bit;
+            
+            HuffmanChar huffmanChar = null;
+            
+            if(node.getLabel().equals("literal")) {
+                sb.append(node.getCoveredText());
+                
+                huffmanChar = new HuffmanChar(node.data, node.getCoveredText());
+                
+            } else if(node.getLabel().equals("control")) {
+                
+                if(node.getCoveredText().equals("7f02")) {
+                    sb.append("\n");
+                } else {
+                    sb.append("{"+node.getCoveredText()+"}");
+                }
+                
+                //covered text contains the hex value
+                huffmanChar = new HuffmanChar(node.data, node.getCoveredText());
+            }
+            
+            //if found
+            if(huffmanChar != null) {
+                huffmanChar.setBits(bitBuffer);
+                huffmanChar.setStartBit(startBit);
+                huffmanChar.setEndBit(i);
+                huffmanChar.setByteIndex(startBit / 8);
+                huffmanChar.setStartBitInByte(startBit % 8);
+                
+                code.add(huffmanChar);
+                
+                node = huffmanTreeRoot;
+                bitBuffer = "";
+                startBit = i + 1;
+            }
+        }
+        
+        code.setText(sb.toString());
+        
+        return code;
+    }
+    
+    public Map<String, String> getCharacterToBitsMap(ParseNode huffmanTreeRoot) {
+        Map<String, String> map = new HashMap<>();
+        
+        getCharacterToBitsMapRecursive("0", huffmanTreeRoot.getChild(0), map);
+        getCharacterToBitsMapRecursive("1", huffmanTreeRoot.getChild(1), map);
+        
+        return map;
+    }
+    
+    private void getCharacterToBitsMapRecursive(String bits, ParseNode parent, Map<String, String> map) {
+        if(parent.getLabel().equals("literal") || parent.getLabel().equals("control")) {
+            map.put(parent.getCoveredText(), bits);
+        } else if(parent.getLabel().equals("node")) {
+            getCharacterToBitsMapRecursive(bits + "0", parent.getChild(0), map);
+            getCharacterToBitsMapRecursive(bits + "1", parent.getChild(1), map);
+        }
+    }
+    
+    public byte[] encode(HuffmanCode code) {
+        
+        Map<String, String> char2str = getCharacterToBitsMap(code.getHuffmanTreeRoot());
+        
+        StringBuilder bitsSB = new StringBuilder();
+        for(HuffmanChar hc : code) {
+            String bits = char2str.get(hc.getLetter());
+            
+            if(bits == null) {
+                new RuntimeException("could not find bit sequence for " + hc + " at index " + code.indexOf(hc));
+            }
+            
+            bitsSB.append(bits);
+        }
+        
+        String allBits = bitsSB.toString();
+        
+        int len = allBits.length() / 8 + (allBits.length() % 8 == 0 ? 0 : 1);
+        
+        //multiple of 4
+        while(len % 4 != 0) {
+            len++;
+        }
+        
+        byte[] data = new byte[len];
+        
+        for(int i = 0; i < allBits.length(); i += 8) {
+            String bits = allBits.substring(i, Math.min(allBits.length(), i+8));
+            
+            while(bits.length() != 8) {
+                bits += "0";
+            }
+            
+            bits = Utils.reverse(bits);
+            int v = Utils.bitsToIntLE(bits);
+            byte b = (byte) v;
+            
+            data[i / 8] = b;
+        }
+        
+        return data;
+    }
+    
+    public ParseNode createHuffmanTree(Map<String, Integer> jpchar2freqMap) {
+        List<ParseNode> list = new ArrayList<>();
+        
+        for(String jpLetter : jpchar2freqMap.keySet()) {
+            
+            ParseNode pn;
+            if(jpLetter.length() == 4) {
+                //control character
+                pn = new ParseNode(jpLetter, "control");
+                
+            } else {
+                /* deprecated: not necessary, is already jp letter
+                //we have to convert ascii to japanese character equivalent
+                String jpLetter = PsxJisReader.ascii2jp.get(letter);
+                if(jpLetter == null) {
+                    throw new RuntimeException("letter is not supported: " + letter);
+                }
+                
+                //just a check for later
+                Byte[] data = reader.char2sjis.get(jpLetter.charAt(0));
+                if(data == null) {
+                    throw new RuntimeException("japanese character Shift-JIS bytes not found: " + jpLetter);
+                }
+                */
+                
+                pn = new ParseNode(jpLetter, "literal");
+            }
+            
+            pn.freq = jpchar2freqMap.get(jpLetter);
+            
+            list.add(pn);
+        }
+        
+        while(list.size() > 1) {
+            
+            list.sort((a,b) -> Integer.compare(a.freq, b.freq));
+            
+            ParseNode a = list.remove(0);
+            ParseNode b = list.remove(0);
+            
+            ParseNode node = new ParseNode("", "node");
+            node.getChildren().add(a);
+            node.getChildren().add(b);
+            node.freq = a.freq + b.freq;
+            
+            list.add(node);
+        }
+        
+        //important to have the correct node count
+        list.get(0).setCoveredText("root");
+        list.get(0).setLabel("root");
+        
+        return list.get(0);
+    }
+    
+    //parses bytes to tree
+    public ParseNode parseTree(byte[] huffmanTreeBytes) {
+        
+        int lastNodeIndex = huffmanTreeBytes.length - 4;
+        byte[] lastNode2Bytes = Arrays.copyOfRange(huffmanTreeBytes, lastNodeIndex, lastNodeIndex + 2);
+        int lastNode = Utils.bytesToInt(new byte[]{0, 0, lastNode2Bytes[1], lastNode2Bytes[0]});
+        int lastNodeNumber = lastNode - 0x8000;
 
-        int a = 0;
+        int rootNumber = lastNodeNumber + 1;
+        
+        int offsetA = 0;
+        //to get the second tree part
+        int offsetB = (int) ((huffmanTreeBytes.length + 2) / 2) - 2;
+        
+        ParseNode root = new ParseNode("root", "root");
+        
+        //======================================================================
+        
+        parseTree(false, rootNumber, root, huffmanTreeBytes);
+        parseTree(true, rootNumber, root, huffmanTreeBytes);
+        
+        return root;
     }
 
+    private void parseTree(boolean bit, int curNumber, ParseNode parent, byte[] huffmanTreeBytes) {
+        
+        int offsetA = 0;
+        //to get the second tree part
+        int offsetB = (int) ((huffmanTreeBytes.length + 2) / 2) - 2;
+        
+        int offset = 0;
+        //bit decide what offset is used
+        if(!bit) {
+           offset = offsetA;
+        } else {
+           offset = offsetB;
+        }
+        
+        int index = offset + curNumber * 2;
+        
+        byte[] nodeBytes = Arrays.copyOfRange(huffmanTreeBytes, index, index + 2);
+        byte[] swap = new byte[]{nodeBytes[1], nodeBytes[0]};
+        String hex = Utils.bytesToHex(swap);
+
+        if (hex.startsWith("8")) {
+
+            int number = Utils.bytesToInt(new byte[]{0, 0, nodeBytes[1], nodeBytes[0]}) - 0x8000;
+            
+            ParseNode newParent = new ParseNode(hex + " [" + number + "] @" + index, "node");
+            newParent.data = nodeBytes;
+            
+            parent.getChildren().add(newParent);
+            
+            //recursion
+            parseTree(false, number, newParent, huffmanTreeBytes);
+            parseTree(true, number, newParent, huffmanTreeBytes);
+
+        } else if (hex.startsWith("7") || hex.equals("0000")) { 
+
+            ParseNode control = new ParseNode(hex, "control");
+            control.data = nodeBytes;
+            parent.getChildren().add(control);
+
+        } else {
+            swap[0] = (byte) (swap[0] + (byte) 0x80);
+            short s = Utils.bytesToShort(swap);
+            Character c = reader.sjishort2char.get(s);
+            String jp = "" + c;
+
+            ParseNode literal = new ParseNode(jp, "literal");
+            literal.data = nodeBytes;
+            parent.getChildren().add(literal);
+        }
+    }
+    
+    public byte[] toHuffmanTreeBytes(ParseNode root) {
+        List<ParseNode> nodes = root.descendantsWithoutThis();
+        
+        int numberOfNodes = 0;
+        
+        //check if complete
+        for(ParseNode pn : nodes) {
+            if(pn.getLabel().equals("node")) {
+                
+                numberOfNodes++;
+                
+                if(pn.getChildren().size() != 2) {
+                    throw new RuntimeException(pn + " has not two children");
+                }
+            }
+        }
+        
+        int arraySize = nodes.size() * 2 + 2; //+2 because 0000
+        byte[] data = new byte[arraySize];
+        
+        //numberOfNodes = 107
+        
+        //105
+        //toHuffmanTreeBytesRecursiveStep(false, numberOfNodes - 2, root.getChild(0), data);
+        
+        //106 = 6A
+        toHuffmanTreeBytesRecursiveStep(new Counter(numberOfNodes), root, data);
+        
+        return data;
+    }
+    
+    private void toHuffmanTreeBytesRecursiveStep(Counter counter, ParseNode node, byte[] data) {
+        
+        ParseNode right = node.getChild(0);
+        ParseNode left = node.getChild(1);
+        
+        int offsetA = 0;
+        //to get the second tree part
+        int offsetB = (int) ((data.length + 2) / 2) - 2;
+        
+        int number = counter.value;
+        
+        byte[] nodeAsBytes;
+        
+        //===================================================================
+        //left
+        
+        int index = offsetB + number * 2;
+        
+        if(left.getLabel().equals("node")) {
+            
+            //107 -> 106
+            counter.dec();
+            
+            nodeAsBytes = toByteArray(left, counter.value);
+            
+        } else {
+            //leaf
+            nodeAsBytes = toByteArray(left, -1);
+        }
+        
+        //write
+        for(int i = 0; i < nodeAsBytes.length; i++) {
+            data[index + i] = nodeAsBytes[i];
+        }
+        
+        //System.out.println("left " + left + " is " + Utils.bytesToHex(nodeAsBytes) + " at " + index);
+        
+        if(left.getLabel().equals("node")) {
+            toHuffmanTreeBytesRecursiveStep(counter, left, data);
+        }
+        
+        //===============================================
+        //right
+        
+        index = offsetA + number * 2;
+        
+        if(right.getLabel().equals("node")) {
+            
+            counter.dec();
+            
+            nodeAsBytes = toByteArray(right, counter.value);
+            
+        } else {
+            //leaf
+            nodeAsBytes = toByteArray(right, -1);
+        }
+        
+        //write
+        for(int i = 0; i < nodeAsBytes.length; i++) {
+            data[index + i] = nodeAsBytes[i];
+        }
+        
+        //System.out.println("right " + right + " is " + Utils.bytesToHex(nodeAsBytes)  + " at " + index);
+        
+        
+        if(right.getLabel().equals("node")) {
+            toHuffmanTreeBytesRecursiveStep(counter, right, data);
+        }
+        
+    }
+    
+    private byte[] toByteArray(ParseNode pn, int number) {
+        byte[] data = new byte[2];
+        
+        if(pn.getLabel().equals("node")) {
+            
+            byte[] numberData = Utils.intToByteArrayLE(number);
+            
+            data[0] = numberData[0];
+            data[1] = (byte) (numberData[1] | 0x80);
+            
+        } else if(pn.getLabel().equals("literal")) {
+            
+            if(pn.getCoveredText().equals("null")) {
+                return data;
+            }
+            
+            Byte[] letterData = reader.char2sjis.get(pn.getCoveredText().charAt(0));
+            
+            if(letterData == null) {
+                throw new RuntimeException(pn + " char not found");
+            }
+            
+            data[1] = (byte) (letterData[0] - 0x80);
+            data[0] = letterData[1] ;
+            
+        } else if(pn.getLabel().equals("control")) {
+            
+            data = Utils.reverse(Utils.hexStringToByteArray(pn.getCoveredText()));
+            
+        }
+        
+        return data;
+    }
+
+    //to have unique node numbers
+    private class Counter {
+        
+        int value;
+
+        public Counter(int value) {
+            this.value = value;
+        }
+        
+        public void dec() {
+            value--;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+        
+    }
+    
     //==========================================================================
     //getter and helper
     public static String getTypeName(int type) {
@@ -1274,6 +1593,20 @@ public class HBD1PS1D {
         return null;
     }
 
+    public Map<String, List<TextBlock>> getTextBlockIDMap() {
+        Map<String, List<TextBlock>> id2tb = new HashMap<>();
+        for(TextBlock tb : textBlocks) {
+            String hexId = Utils.bytesToHex(Utils.intToByteArray(tb.id)).toUpperCase();
+            
+            if(!hexId.startsWith("0000")) {
+                throw new RuntimeException("the hexid is greater then a short: " + hexId);
+            }
+            hexId = hexId.substring(4, 8);
+            id2tb.computeIfAbsent(hexId, bb -> new ArrayList<>()).add(tb);
+        }
+        return id2tb;
+    } 
+    
     public void sortBySizeCompressed(List<StarZerosSubBlock> l) {
         l.sort((a, b) -> {
 
@@ -1327,7 +1660,17 @@ public class HBD1PS1D {
                 fos.write(hbdBlock.writeThisBlock);
             }
 
-            byte[] trailingZeros = new byte[numberOfTrailingZeros];
+            //fill with zeros to get the exact same file size
+            
+            long originalLength = file.length();
+            long currentLength = fos.getChannel().size();
+            
+            if(originalLength < currentLength) {
+                throw new RuntimeException("should not happen");
+            }
+            
+            long diffLength = originalLength - currentLength;
+            byte[] trailingZeros = new byte[(int) diffLength];
             fos.write(trailingZeros);
 
         } catch (IOException ex) {

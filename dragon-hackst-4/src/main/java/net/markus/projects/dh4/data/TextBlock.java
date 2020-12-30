@@ -3,8 +3,6 @@ package net.markus.projects.dh4.data;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.Queue;
-import java.util.Stack;
 import net.markus.projects.dh4.util.Utils;
 
 /**
@@ -15,95 +13,110 @@ public class TextBlock {
     //here data is only used
     public StarZerosSubBlock subBlock;
     
+    //just to see the header only
+    @Deprecated
     public byte[] header;
     
-    public int a;
-    public int b;
-    public int c;
-    public int d;
-    public int e;
-    public int f;
+    public int endOffset;
+    public int id;//unknown
+    public int huffmanCodeStart; //c
+    public int huffmanTreeBytesEnd; //d
+    public int huffmanCodeEnd; //e
+    public int dataHeaderToHuffmanCodeStart; //f
     
-    public byte[] dataHeaderToCE;
-    public byte[] huffmanCode;
-    public byte[] huffmanTreeBytes; //tree data
-    public byte[] dataDA;
+    public byte[] dataHeaderToHuffmanCode; //unkown
+    public byte[] huffmanCode; //c - e
+    public byte[] huffmanTreeBytes; //e(+10) - d
+    public byte[] dataDA; //unknown
     
     public ParseNode root;
-    public Stack<ParseNode> stack;
-    public Queue<ParseNode> queue;
     
-    public int e1; //+0 (4)
-    public int e2; //+4 (4)
-    public int e3; //+8 (2)
+    public int huffmanTreeBytesStart; //+0 (4)
+    public int huffmanTreeBytesMiddle; //+4 (4)
+    public int numberOfNodes; //+8 (2)
     
-    public int atA;
-    public int atAnext;
-    public byte[] dataAtA;
+    public int atEndOffset;
+    public int numberOfDataEndBlocks;
+    public byte[] dataEnd;
     
-    /*
-    @Deprecated
-    public byte[] dataE1;
-    @Deprecated
-    public byte[] dataE2;
-    
-    @Deprecated
-    public int atE;
-    @Deprecated
-    public int atEnext;
-    @Deprecated
-    public byte[] dataAtE;
-    */
-    
-    /*
-    public byte[] data1;
-    public byte[] data2;
-    public byte[] dataSize1;
-    
-    public int data2a;
-    public int data2b;
-    */
-
     @Override
     public String toString() {
-        return "TextBlock{" + "subBlock=" + subBlock + ", a=" + a + ", b=" + b + ", c=" + c + ", d=" + d + ", e=" + e + ", f=" + f + ", dataHeaderToCE=" + dataHeaderToCE.length + ", dataCE=" + huffmanCode.length + ", dataED=" + huffmanTreeBytes.length + ", dataDA=" + dataDA.length + ", e1=" + e1 + ", e2=" + e2 + ", e3=" + e3 + ", atA=" + atA + ", atAnext=" + atAnext + ", dataAtA=" + dataAtA.length + '}';
+        return "TextBlock{" + "subBlock=" + subBlock + ", a=" + endOffset + ", b=" + id + ", c=" + huffmanCodeStart + ", d=" + huffmanTreeBytesEnd + ", e=" + huffmanCodeEnd + ", f=" + dataHeaderToHuffmanCodeStart + ", dataHeaderToCE=" + dataHeaderToHuffmanCode.length + ", dataCE=" + huffmanCode.length + ", dataED=" + huffmanTreeBytes.length + ", dataDA=" + dataDA.length + ", e1=" + huffmanTreeBytesStart + ", e2=" + huffmanTreeBytesMiddle + ", e3=" + numberOfNodes + ", atA=" + atEndOffset + ", atAnext=" + numberOfDataEndBlocks + ", dataAtA=" + dataEnd.length + '}';
     }
     
     public void write() throws IOException {
+        //if(subBlock.getPath().equals("26046/13")) {
+        //    int a = 0;
+        //}
+        
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         
-        baos.write(Utils.intToByteArrayLE(a));
-        baos.write(Utils.intToByteArrayLE(b));
-        baos.write(Utils.intToByteArrayLE(c));
-        baos.write(Utils.intToByteArrayLE(d));
-        baos.write(Utils.intToByteArrayLE(e));
-        baos.write(Utils.intToByteArrayLE(f));
+        int endOffsetInternal = 
+                4 * 6 + //header
+                dataHeaderToHuffmanCode.length + 
+                huffmanCode.length + 
+                10 + //header for tree
+                huffmanTreeBytes.length + 
+                dataDA.length;
         
-        baos.write(dataHeaderToCE);
+        int huffmanCodeStartInternal = 
+                4 * 6 + 
+                dataHeaderToHuffmanCode.length;
+        
+        int huffmanCodeEndInternal = 
+                huffmanCodeStartInternal + 
+                huffmanCode.length;
+        
+        int huffmanTreeBytesEndInternal =
+                huffmanCodeEndInternal +
+                10 +
+                huffmanTreeBytes.length;
+        
+        if(huffmanTreeBytesEndInternal == endOffsetInternal) {
+            huffmanTreeBytesEndInternal = 0;
+        }
+                
+        int numberOfDataEndBlocksInternal = 
+                dataEnd.length / 8;
+        
+        int dataHeaderToHuffmanCodeStartInternal = 0;
+        if(dataHeaderToHuffmanCode.length > 0) {
+            dataHeaderToHuffmanCodeStartInternal = 6 * 4;
+        }
+        
+        baos.write(Utils.intToByteArrayLE(endOffsetInternal));
+        baos.write(Utils.intToByteArrayLE(id));
+        baos.write(Utils.intToByteArrayLE(huffmanCodeStartInternal));
+        baos.write(Utils.intToByteArrayLE(huffmanTreeBytesEndInternal));
+        baos.write(Utils.intToByteArrayLE(huffmanCodeEndInternal));
+        baos.write(Utils.intToByteArrayLE(dataHeaderToHuffmanCodeStartInternal));
+        
+        baos.write(dataHeaderToHuffmanCode);
         baos.write(huffmanCode);
         
+        int numberOfNodesInternal = (int) root.descendants().stream().filter(pn -> pn.getLabel().equals("node")).count();
+        
+        int huffmanTreeBytesStartInternal = huffmanCodeEndInternal + 10;
+        int huffmanTreeBytesMiddleInternal = huffmanTreeBytesStartInternal + (huffmanTreeBytes.length / 2) - 1;
+        
         //two ints here
-        baos.write(Utils.intToByteArrayLE(e1));
-        baos.write(Utils.intToByteArrayLE(e2));
-        baos.write(Utils.shortToByteArrayLE(e3));
+        baos.write(Utils.intToByteArrayLE(huffmanTreeBytesStartInternal));
+        baos.write(Utils.intToByteArrayLE(huffmanTreeBytesMiddleInternal));
+        baos.write(Utils.shortToByteArrayLE(numberOfNodesInternal));
         
         baos.write(huffmanTreeBytes);
         baos.write(dataDA);
         
-        baos.write(Utils.intToByteArrayLE(atA));
-        baos.write(Utils.intToByteArrayLE(atAnext));
-        baos.write(dataAtA);
+        baos.write(Utils.intToByteArrayLE(endOffsetInternal));
+        baos.write(Utils.intToByteArrayLE(numberOfDataEndBlocksInternal));
+        baos.write(dataEnd);
         
         byte[] tmp = baos.toByteArray();
         
-        if(tmp.length != subBlock.data.length) {
-            new RuntimeException("same length problem");
-        }
+        int cmp = Utils.compare(tmp, subBlock.data);
         
-        for(int i = 0; i < subBlock.data.length; i++) {
-            if(tmp[i] != subBlock.data[i]) {
-                new RuntimeException("byte equality problem");
-            }
+        if(cmp != -1) {
+            System.out.println("TextBlock: " + subBlock.getPath() + " compare: " + cmp);
         }
         
         subBlock.data = tmp;

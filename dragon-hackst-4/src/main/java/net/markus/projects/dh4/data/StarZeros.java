@@ -80,7 +80,7 @@ public class StarZeros extends HBDBlock {
         
         int sectors_ = (sizeAll_ / 2048) + (sizeAll_ % 2048 != 0 ? 1 : 0);
 
-        //short tests
+        //debug tests
         if(blocks != blocks_) {
             int a = 0;
         }
@@ -100,8 +100,8 @@ public class StarZeros extends HBDBlock {
         
         for(StarZerosSubBlock subblock : starZerosBlocks) {
             
-            baos.write(Utils.intToByteArrayLE(subblock.size));
-            baos.write(Utils.intToByteArrayLE(subblock.sizeUncompressed));
+            baos.write(Utils.intToByteArrayLE(subblock.data.length));
+            baos.write(Utils.intToByteArrayLE(subblock.sizeUncompressed)); //TODO sizeUncompressed
             baos.write(Utils.intToByteArrayLE(subblock.unknown));
             baos.write(Utils.shortToByteArrayLE(subblock.flags1));
             baos.write(Utils.shortToByteArrayLE(subblock.type));
@@ -121,10 +121,10 @@ public class StarZeros extends HBDBlock {
         int rest = i - l;
         baos.write(new byte[rest]);
         
-        if(baos.toByteArray().length % 2048 != 0) {
-            throw new RuntimeException("needs to be a multiple of 2048");
+        int cmp = Utils.compare(baos.toByteArray(), this.full2048);
+        if(cmp != -1) {
+            System.out.println("StarZeros: " + blockIndex + " compare: " + cmp);
         }
-        
         
         //if(full2048.length != baos.toByteArray().length) {
         //    throw new RuntimeException("len has to be same: " + full2048.length + " vs " + baos.toByteArray().length + " in " + blockIndex);
