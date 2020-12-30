@@ -1,6 +1,9 @@
 # Dragon "Hackst" 4
 
-Dragon Quest 4 (PSX) Hacking Code
+Dragon Quest 4 (PSX) Hacking Code to translate it
+
+
+![](img/translation.png)
 
 Links:
 * [Blog Post](http://markus-projects.net/dragon-hackst-iv/)
