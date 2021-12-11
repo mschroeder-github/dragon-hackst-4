@@ -40,18 +40,22 @@ public class Main {
     public static void main(String[] args) throws Exception {
         //shiftjisToHex();
         
-        boolean writePatch = true;
+        boolean writePatch = false;
         DQFiles dqFiles = DQFiles.dq4();
         
         HBD1PS1D hbd = load(dqFiles.readHbdFile);
         PSEXE psexe = psxexe(dqFiles);
         
+        System.out.println();
+        System.out.println("transform");
+        
+        analyseTextBlocksV2(hbd);
         //inspectWithGUI(hbd);
         //translationPreparation(hbd, dqFiles);
-        translationEmbedding(hbd, psexe, dqFiles);
+        //translationEmbedding(hbd, psexe, dqFiles);
+        //translationEmbeddingV2(hbd, psexe, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
-        //analyseTextBlocks(hbd);
         //h60010108Blocks(hbd);
         //lzsEvaluation(hbd);
         //timExtraction(hbd);
@@ -59,6 +63,9 @@ public class Main {
         //fontImages(hbd);
         
         if(writePatch) {
+            System.out.println();
+            System.out.println("write patch");
+            
             updateBlocks(hbd);
             save(hbd, dqFiles.writeHbdFile);
             
@@ -69,6 +76,11 @@ public class Main {
             System.out.println("write psexe to " + patchedPsexe);
             psexe.save(patchedPsexe);
 
+            //open patched one again
+            System.out.println("reload patched file to check for I/O errors -----------");
+            HBD1PS1D patchedHbd = load(dqFiles.writeHbdFile);
+            System.out.println("done -----------------");
+            
             File psxbuildBin = new File("../../tools/psximager-master/psximager-master/src/psxbuild");
             psxbuild(dqFiles, psxbuildBin);
         }
@@ -99,7 +111,7 @@ public class Main {
         //hbd.starZerosAnalysis();
         
         //certain types are text blocks
-        hbd.textBlockExtraction(file.getName().endsWith("Q41") ? HBD1PS1D.dq4TextTypes : HBD1PS1D.dq7TextTypes);
+        hbd.textBlockExtraction(file.getName().contains("Q41") ? HBD1PS1D.dq4TextTypes : HBD1PS1D.dq7TextTypes);
         
         return hbd;
     }
@@ -159,6 +171,13 @@ public class Main {
         //this updates the linked sub-blocks in data attribute
         //but does not update the main-blocks
         
+        hbd.textBlocks.sort((a,b) -> {
+            return Integer.compare(
+                    a.subBlock.parent.blockIndex,
+                    b.subBlock.parent.blockIndex
+            );
+        });
+        
         hbd.textBlocks.forEach(tb -> {
             try {
                 //updates sub-block data
@@ -186,6 +205,74 @@ public class Main {
     //to look into the subblocks
     private static void inspectWithGUI(HBD1PS1D hbd) {
         HBDFrame.showGUI(hbd);
+    }
+    
+    private static void analyseTextBlocksV2(HBD1PS1D hbd) {
+        
+        System.out.println(hbd.textBlocks.size() + " text blocks");
+        
+        TextBlock firstScene = hbd.getTextBlock(26046, 13);
+        
+        List<TextBlock> tbs = Arrays.asList(firstScene);
+        
+        for(TextBlock textBlock : tbs) {
+            
+            System.out.println(textBlock.getHexID());
+            
+            byte[] dBlock = textBlock.dataDA;
+            
+            /*
+            O(00000001) D1(000003D8) D2(00000464) DV[0002,0002,0002,000F,0010,0010]
+            O -> indicates whether there will be data in the d-block
+            
+            D1 -> offset to D1
+            D2 -> offset to D2
+            
+            DV -> "D Values"
+            DV[0] is the number of sections
+            DV[1] and DV[2] are always 0x02
+            DV[3] is the total number of entries across sections
+            DV[4] and DV[5] are always 0x10
+            */
+            int offsetD1 = Utils.bytesToInt(Utils.reverse(Arrays.copyOfRange(dBlock, 4,  8)));
+            int offsetD2 = Utils.bytesToInt(Utils.reverse(Arrays.copyOfRange(dBlock, 8, 12)));
+            
+            int offset = 12;
+            int i1 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            int i2 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            int i3 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            int i4 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            int i5 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            int i6 = Utils.bytesToShortLE(Arrays.copyOfRange(dBlock, offset, offset + 2)); offset += 2;
+            
+            System.out.println("offsetD1=" + offsetD1);
+            System.out.println("offsetD2=" + offsetD2);
+            
+            System.out.println("i1=" + i1);
+            System.out.println("i2=" + i2);
+            System.out.println("i3=" + i3);
+            System.out.println("i4=" + i4);
+            System.out.println("i5=" + i5);
+            System.out.println("i6=" + i6);
+            
+            byte[] D1 = Arrays.copyOfRange(textBlock.subBlock.data, offsetD1, offsetD2);
+            byte[] D2 = Arrays.copyOfRange(textBlock.subBlock.data, offsetD2, textBlock.endOffset);
+            
+            System.out.println("D1.length=" + D1.length);
+            System.out.println("D2.length=" + D2.length);
+            
+            System.out.println("dBlock");
+            System.out.println(Utils.toHexDump(dBlock, 16, true, false, null));
+            
+            System.out.println("D1");
+            System.out.println(Utils.toHexDump(D1, 8, true, false, null));
+            
+            System.out.println("D2");
+            System.out.println(Utils.toHexDump(D2, 8, true, false, null));
+            
+            
+        }
+        
     }
     
     private static void analyseTextBlocks(HBD1PS1D hbd) {
@@ -399,6 +486,11 @@ public class Main {
     private static void translationEmbedding(HBD1PS1D hbd, PSEXE psexe, DQFiles dqFiles) throws IOException {
         TranslationEmbedding embedding = new TranslationEmbedding();
         embedding.embed(dqFiles.translationFolderRead, hbd, psexe);
+    }
+    
+    private static void translationEmbeddingV2(HBD1PS1D hbd, PSEXE psexe, DQFiles dqFiles) throws IOException {
+        TranslationEmbedding embedding = new TranslationEmbedding();
+        embedding.embedV2(dqFiles.translationFolderRead, hbd, psexe);
     }
     
     //mass decompression: check if everything works

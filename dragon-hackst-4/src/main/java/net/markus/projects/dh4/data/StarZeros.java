@@ -32,6 +32,12 @@ public class StarZeros extends HBDBlock {
     
     public int trailing00startPos;
     
+    public int remaining() {
+        int total = sectors * 2048;
+        //header, subblock header, raw data size
+        return total - (16 + (starZerosBlocks.size() * 16) + sizeTotal);
+    }
+    
     @Deprecated
     public int size2;
     
@@ -82,13 +88,15 @@ public class StarZeros extends HBDBlock {
 
         //debug tests
         if(blocks != blocks_) {
-            int a = 0;
+            System.out.println(blockIndex + " blocks change from " + blocks + " to " + blocks_);
         }
         if(sectors != sectors_) {
-            int a = 0;
+            //System.out.println(blockIndex + " sector change from " + sectors + " to " + sectors_);
+            //because this causes I/O errors we throw an exception
+            throw new RuntimeException(blockIndex + " sector change from " + sectors + " to " + sectors_);
         }
         if(sizeTotal != sizeTotal_) {
-            int a = 0;
+            //System.out.println(blockIndex + " sizeTotal change from " + sizeTotal + " to " + sizeTotal_);
         }
         
         baos.write(Utils.intToByteArrayLE(blocks_));

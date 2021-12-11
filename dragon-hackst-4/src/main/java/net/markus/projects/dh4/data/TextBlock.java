@@ -3,6 +3,7 @@ package net.markus.projects.dh4.data;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.List;
 import net.markus.projects.dh4.util.Utils;
 
 /**
@@ -39,15 +40,19 @@ public class TextBlock {
     public int numberOfDataEndBlocks;
     public byte[] dataEnd;
     
+    
+    public byte[] extraDataEnd = new byte[0];
+    
+    public String getHexID() {
+        return Utils.bytesToHex(Utils.intToByteArray(id)).toUpperCase().substring(4, 8);
+    }
+    
     @Override
     public String toString() {
         return "TextBlock{" + "subBlock=" + subBlock + ", a=" + endOffset + ", b=" + id + ", c=" + huffmanCodeStart + ", d=" + huffmanTreeBytesEnd + ", e=" + huffmanCodeEnd + ", f=" + dataHeaderToHuffmanCodeStart + ", dataHeaderToCE=" + dataHeaderToHuffmanCode.length + ", dataCE=" + huffmanCode.length + ", dataED=" + huffmanTreeBytes.length + ", dataDA=" + dataDA.length + ", e1=" + huffmanTreeBytesStart + ", e2=" + huffmanTreeBytesMiddle + ", e3=" + numberOfNodes + ", atA=" + atEndOffset + ", atAnext=" + numberOfDataEndBlocks + ", dataAtA=" + dataEnd.length + '}';
     }
     
     public void write() throws IOException {
-        //if(subBlock.getPath().equals("26046/13")) {
-        //    int a = 0;
-        //}
         
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         
@@ -76,8 +81,12 @@ public class TextBlock {
             huffmanTreeBytesEndInternal = 0;
         }
                 
+        //if((dataEnd.length /*+ extraDataEnd.length*/) % 8 != 0) {
+        //    throw new RuntimeException("(dataEnd.length + extraDataEnd.length) % 8 != 0: " + (dataEnd.length /*+ extraDataEnd.length*/) % 8);
+        //}
+        
         int numberOfDataEndBlocksInternal = 
-                dataEnd.length / 8;
+                (dataEnd.length /*+ extraDataEnd.length*/) / 8;
         
         int dataHeaderToHuffmanCodeStartInternal = 0;
         if(dataHeaderToHuffmanCode.length > 0) {
@@ -111,12 +120,41 @@ public class TextBlock {
         baos.write(Utils.intToByteArrayLE(numberOfDataEndBlocksInternal));
         baos.write(dataEnd);
         
+        baos.write(extraDataEnd);
+        
         byte[] tmp = baos.toByteArray();
         
         int cmp = Utils.compare(tmp, subBlock.data);
         
         if(cmp != -1) {
             System.out.println("TextBlock: " + subBlock.getPath() + " compare: " + cmp);
+            
+            //System.out.println(Utils.toHexDump(tmp, 16, true, false, null));
+            
+            //System.out.println(Utils.toHexDump(subBlock.data, 16, true, false, null));
+            
+            //in 298/0 we parse the tree not correct, we get 12 nodes but there are 26
+            
+            List<String> l = Utils.compare(new Object[] {
+                "endOffset", endOffset, endOffsetInternal,
+                "huffmanCodeStart", huffmanCodeStart, huffmanCodeStartInternal,
+                "huffmanTreeBytesEnd", huffmanTreeBytesEnd, huffmanTreeBytesEndInternal,
+                "huffmanCodeEnd", huffmanCodeEnd, huffmanCodeEndInternal,
+                "dataHeaderToHuffmanCodeStart", dataHeaderToHuffmanCodeStart, dataHeaderToHuffmanCodeStartInternal,
+                "huffmanTreeBytesStart", huffmanTreeBytesStart, huffmanTreeBytesStartInternal,
+                "huffmanTreeBytesMiddle", huffmanTreeBytesMiddle, huffmanTreeBytesMiddleInternal,
+                "numberOfNodes", numberOfNodes, numberOfNodesInternal,
+                "numberOfDataEndBlocks", numberOfDataEndBlocks, numberOfDataEndBlocksInternal
+            });
+            
+            l.forEach(str -> System.out.println("\t" + str));
+            
+            /*
+            if(numberOfNodes != numberOfNodesInternal) {
+                System.out.println(Utils.toHexDump(huffmanTreeBytes, 16, true, false, null));
+                
+                System.out.println(root.toStringTree());
+            }*/
         }
         
         subBlock.data = tmp;

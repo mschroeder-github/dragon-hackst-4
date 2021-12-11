@@ -668,7 +668,7 @@ public class HBD1PS1D {
 
         for (Integer type : types) {
             for (StarZerosSubBlock sb : getStarZerosSubBlocks(type)) {
-
+                
                 TextBlock tb = new TextBlock();
                 tb.subBlock = sb;
 
@@ -1672,10 +1672,18 @@ public class HBD1PS1D {
             long diffLength = originalLength - currentLength;
             byte[] trailingZeros = new byte[(int) diffLength];
             fos.write(trailingZeros);
+            
+            System.out.println("original had trailing zeros: " + numberOfTrailingZeros);
+            System.out.println("patched has  trailing zeros: " + diffLength);
+            
+            //30265344 bytes / 2048 bytes = 14778 sectors
 
         } catch (IOException ex) {
             throw new RuntimeException(ex);
         }
+        
+        System.out.println("original has size " + file.length());
+        System.out.println("patched  has size " + target.length());
     }
 
 }

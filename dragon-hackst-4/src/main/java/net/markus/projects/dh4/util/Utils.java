@@ -1,5 +1,6 @@
 package net.markus.projects.dh4.util;
 
+//import com.google.common.base.Objects;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
@@ -8,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  *
@@ -521,4 +523,18 @@ public class Utils {
         return -1;
     }
 
+    /**
+     * 
+     * @param nameAndValues name, valueA, valueB, name, valueA, valueB, ...
+     * @return 
+     */
+    public static List<String> compare(Object[] nameAndValues) {
+        List<String> l = new ArrayList<>();
+        for(int i = 0; i < nameAndValues.length; i += 3) {
+            if(!Objects.equals(nameAndValues[i+1],nameAndValues[i+2])) {
+                l.add(nameAndValues[i] + " is different: " + nameAndValues[i+1] + " was changed to " + nameAndValues[i+2]);
+            }
+        }
+        return l;
+    }
 }

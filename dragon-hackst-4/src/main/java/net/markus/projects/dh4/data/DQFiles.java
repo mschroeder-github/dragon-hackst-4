@@ -64,7 +64,7 @@ public class DQFiles {
         files.writeHbdFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/HBD1PS1D.Q41.patched");
         
         files.translationFolderWrite = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation");
-        files.translationFolderRead = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation_test");
+        files.translationFolderRead = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation"); //new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/translation_test");
         
         //psxbuild
         files.catFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip.cat");

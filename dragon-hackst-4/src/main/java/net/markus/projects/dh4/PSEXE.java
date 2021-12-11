@@ -266,8 +266,8 @@ public class PSEXE extends ArrayList<OpCode> {
         ));
         
         //do not change anything if not matched so that normal dialog works
-        middle.add(new OpCode("nop"));
-        middle.add(new OpCode("jmp " + nopPosNext1));
+        //middle.add(new OpCode("nop"));
+        //middle.add(new OpCode("jmp " + nopPosNext1));
         
         //the offset in bytes how far we have to jump from startPosHex to the end-block
         int offset = (codes.size() + middle.size()) * 4;
