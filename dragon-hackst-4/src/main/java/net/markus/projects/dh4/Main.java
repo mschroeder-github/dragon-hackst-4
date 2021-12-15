@@ -4,6 +4,7 @@ package net.markus.projects.dh4;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -20,6 +21,7 @@ import java.util.Set;
 import javax.imageio.ImageIO;
 import net.markus.projects.dh4.DQLZS.DecompressResult;
 import net.markus.projects.dh4.data.DQFiles;
+import net.markus.projects.dh4.data.Found;
 import net.markus.projects.dh4.data.H60010108;
 import net.markus.projects.dh4.data.HBDBlock;
 import net.markus.projects.dh4.data.HuffmanChar;
@@ -27,10 +29,12 @@ import net.markus.projects.dh4.data.HuffmanCode;
 import net.markus.projects.dh4.data.StarZeros;
 import net.markus.projects.dh4.data.StarZerosSubBlock;
 import net.markus.projects.dh4.data.TextBlock;
+import net.markus.projects.dh4.util.FastStringSearch;
 import net.markus.projects.dh4.util.Utils;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 
 /**
  * Main entry point.
@@ -49,15 +53,16 @@ public class Main {
         System.out.println();
         System.out.println("transform");
         
-        analyseTextBlocksV2(hbd);
+        //analyseTextBlocksV2(hbd);
         //inspectWithGUI(hbd);
-        //translationPreparation(hbd, dqFiles);
+        //RAMmap(hbd, new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/memory-hexdump"));
+        translationPreparation(hbd, dqFiles);
         //translationEmbedding(hbd, psexe, dqFiles);
         //translationEmbeddingV2(hbd, psexe, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //h60010108Blocks(hbd);
-        //lzsEvaluation(hbd);
+        //lzsDecompressionEvaluation(hbd);
         //timExtraction(hbd);
         //veryFirstBlock(hbd);
         //fontImages(hbd);
@@ -69,10 +74,20 @@ public class Main {
             updateBlocks(hbd);
             save(hbd, dqFiles.writeHbdFile);
             
+            FileUtils.deleteQuietly(dqFiles.patchedFolder);
             dqFiles.patchedFolder.mkdirs();
             System.out.println("mkdir " + dqFiles.patchedFolder);
             
-            File patchedPsexe = new File(new File(dqFiles.patchedFolder, dqFiles.name), dqFiles.exeFile.getName());
+            File tmpFolder = new File(dqFiles.patchedFolder, dqFiles.name);
+            tmpFolder.mkdir();
+            System.out.println("mkdir " + tmpFolder);
+            
+            //done by psxbuild
+            //File copiedCnfFile = new File(tmpFolder, dqFiles.cnfFile.getName());
+            //System.out.println("write cnf to " + copiedCnfFile);
+            //FileUtils.copyFile(dqFiles.cnfFile, copiedCnfFile);
+            
+            File patchedPsexe = new File(tmpFolder, dqFiles.exeFile.getName());
             System.out.println("write psexe to " + patchedPsexe);
             psexe.save(patchedPsexe);
 
@@ -116,17 +131,23 @@ public class Main {
         return hbd;
     }
     
+    //print blocks that contain a certain pattern
     private static void printBlocks(HBD1PS1D hbd) {
         
         //found only in 26046/13
         //byte[] pattern = Utils.hexStringToByteArray("61806380658067806980E708C609");
         //26046/13
-        byte[] pattern = Utils.hexStringToByteArray("6B00C808");//C808EA08B202 780B6C0D510E700E
+        
+        //the jump from assembly
+        //byte[] pattern = Utils.hexStringToByteArray("E03A020C21200002");
+        //byte[] pattern = Utils.hexStringToByteArray("E03A020C 21200002 1400BF8F 1000B08F 0800E003 1800BD27 E8FFBD27 16008010 1000BFAF");
+        
+        //this seems to be an interpreter line while the first scene runs
+        byte[] pattern = Utils.hexStringToByteArray("B3 02 03 00 00 00 C0 21 A0 91 0F C0 06");
         
         List<StarZerosSubBlock> matched = new ArrayList<>();
         
         for(HBDBlock block : hbd.blocks) {
-            byte[] toSearch = null;
             
             if(block instanceof StarZeros) {
                 StarZeros sz = (StarZeros) block;
@@ -136,9 +157,17 @@ public class Main {
                 for(StarZerosSubBlock sb : sz.starZerosBlocks) {
                     //System.out.println("\t" + sb + " " + HBD1PS1D.getTypeName(sb.type));
                     
-                    List<Integer> l = Utils.find(pattern, sb.data);
+                    byte[] data;
+                    if(sb.compressed) {
+                        data = DQLZS.decompress(sb.data, sb.sizeUncompressed).data;
+                    } else {
+                        data = sb.data;
+                    }
+
+                    List<Integer> l = Utils.find(pattern, data);
                     
                     if(!l.isEmpty()) {
+                        System.out.println(sb + " " + HBD1PS1D.getTypeName(sb.type));
                         System.out.println("found at: " + l);
                         matched.add(sb);
                         //return;
@@ -155,11 +184,11 @@ public class Main {
         for(StarZerosSubBlock sb : matched) {
             System.out.println(sb);
             
-            for(TextBlock tb : hbd.textBlocks) {
-                if(tb.subBlock == sb) {
-                    System.out.println(tb);
-                }
-            }
+            //for(TextBlock tb : hbd.textBlocks) {
+            //    if(tb.subBlock == sb) {
+            //        System.out.println(tb);
+            //    }
+            //}
         }
         
         
@@ -494,7 +523,7 @@ public class Main {
     }
     
     //mass decompression: check if everything works
-    private static void lzsEvaluation(HBD1PS1D hbd) throws IOException {
+    private static void lzsDecompressionEvaluation(HBD1PS1D hbd) throws IOException {
         
         int all = hbd.getStarZerosSubBlocks().size();
         List<StarZerosSubBlock> compressedList = hbd.getStarZerosSubBlocksCompressed();
@@ -727,6 +756,83 @@ public class Main {
         //ll.forEach(e -> System.out.println(e));
         
         ImageIO.write(img1, "png", new File(folder, "01.png"));
+    }
+    
+    private static void RAMmap(HBD1PS1D hbd, File ramDumpFile) {
+        //ramDumpFile can be created in no$psx from 0x80000000
+        //0x00200000 => cycle
+        
+        int size = Utils.bytesToInt(Utils.hexStringToByteArray("00200000"));
+        System.out.println(size);
+        System.out.println(Math.pow(2, 21));
+        //size = 2097152; = 2MB = 2^21
+        //"PS has 2MB main RAM, 1MB video RAM and 512k sound RAM"
+        
+        List<Found> founds = new ArrayList<>();
+        
+        byte[] ram;
+        try {
+            FileInputStream fis = new FileInputStream(ramDumpFile);
+            ram = IOUtils.toByteArray(fis, (int) Math.pow(2, 21));
+            fis.close();
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+        
+        for(int i = 0; i < hbd.blocks.size(); i++) {
+            
+            HBDBlock block = hbd.blocks.get(i);
+            
+            if(block instanceof StarZeros) {
+                StarZeros sz = (StarZeros) block;
+                
+                //System.out.println(sz.blockIndex);
+                
+                for(StarZerosSubBlock sb : sz.starZerosBlocks) {
+                    //System.out.println("\t" + sb + " " + HBD1PS1D.getTypeName(sb.type));
+                    
+                    byte[] data;
+                    if(sb.compressed) {
+                        data = DQLZS.decompress(sb.data, sb.sizeUncompressed).data;
+                    } else {
+                        data = sb.data;
+                    }
+
+                    //List<Integer> l = Utils.find(data, ram);
+                    
+                    int index = FastStringSearch.quickSearch(ram, data);
+                    
+                    if(index != -1) {
+                        
+                        //for(Integer begin : l) {
+                            
+                            Found found = new Found();
+                            found.block = sb;
+                            found.begin = index;
+                            found.end = index + data.length;
+                            found.data = data;
+                         
+                            System.out.println("\t" + found);
+                            
+                            founds.add(found);
+                        //}
+                        
+                        //System.out.println(sb + " " + HBD1PS1D.getTypeName(sb.type));
+                        //System.out.println("found at: " + l);
+                    }
+                }
+            }
+            else if(block instanceof H60010108) {
+                H60010108 h6 = (H60010108) block;
+            }
+            
+            
+            System.out.println(i + "/" + hbd.blocks.size() + ", found: " + founds.size());
+        }
+        
+        founds.sort((a,b) -> Integer.compare(a.begin, b.begin));
+        founds.forEach(found -> System.out.println(found));
+        
     }
     
     private static void shiftjisToHex(String input) {

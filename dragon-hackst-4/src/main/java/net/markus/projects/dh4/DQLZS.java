@@ -20,7 +20,6 @@ public class DQLZS {
         return result;
     }
 
-    //still TODO
     public static DecompressResult decompress(byte[] compressed, int decompressSize) {
 
         DecompressResult result = new DecompressResult();

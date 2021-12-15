@@ -58,7 +58,7 @@ public class DQFiles {
         //read
         files.readHbdFile  = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/HBD1PS1D.Q41");
         
-        files.patchedFolder = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan) (Patched)");
+        files.patchedFolder = new File("../../Patched-DQ4"); //Dragon Quest IV - Michibikareshi Mono Tachi (Japan) (Patched)
         files.exeFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/SLPM_869.16");
         files.cnfFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/SYSTEM.CNF");
         files.writeHbdFile = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/HBD1PS1D.Q41.patched");

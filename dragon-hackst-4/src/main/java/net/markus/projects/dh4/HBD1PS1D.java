@@ -754,8 +754,6 @@ public class HBD1PS1D {
         
         for (Entry<String, List<TextBlock>> e : id2tb.entrySet()) {
             String idHex = e.getKey();
-            
-            
 
             //JSONArray textBlocksJsonArray = new JSONArray();
             //for(TextBlock tb : e.getValue()) {
@@ -812,13 +810,39 @@ public class HBD1PS1D {
                 File translationFile = new File(translationFolder, idHex + ".csv");
                 CSVPrinter csvp = CSVFormat.DEFAULT.print(translationFile, StandardCharsets.UTF_8);
 
+                //0*6C => c0 *6 
+                String textIdRefInCutScene = idHex.charAt(3) + "0 " + idHex.substring(1,3);
+                textIdRefInCutScene = textIdRefInCutScene.toLowerCase();
+                
                 for(HuffmanCode segment : segments) {
+                    
+                    //dialog operation seems to be
+                    //c0 21 a0 .. ..    ** **
+                    //         bit ref  text id
+                    
+                    //(tb.huffmanCodeStart * 8) to skip the header bits = 24 bytes * 8 bits
+                    int firstBitIndex = segment.get(0).getStartBit() + (tb.huffmanCodeStart * 8);
+                    String bitOffsetHex = Utils.bytesToHex(Utils.intToByteArray(firstBitIndex));
+                    bitOffsetHex = bitOffsetHex.substring(4, 8);
+                    
+                    //0f91 => 91 0f 
+                    String bitRefInCutScene = bitOffsetHex.substring(2, 4) + " " + bitOffsetHex.substring(0, 2);
+                    bitRefInCutScene = bitRefInCutScene.toLowerCase();
+                    
+                    
                     csvp.printRecord(
                             "", //translation
                             segment.getText(), //original
 
+                            //pattern
+                            "c0 21 a0 " + bitRefInCutScene + " " + textIdRefInCutScene,
+                            
+                            bitOffsetHex,
+                            
+                            tb.subBlock.getPath()
+                            
                             //"ID" + idHex, //id of the textblock
-                            "0x" + segment.getByteDiffInHex() //byte diff
+                            //"0x" + segment.getByteDiffInHex() //byte diff
                             //textBlocksJsonArray.toString() //so that we know what textblocks we have to update
                     );
                 }
