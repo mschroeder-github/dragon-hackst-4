@@ -623,9 +623,9 @@ public class Main {
                 System.out.println();
             }
             
-            DecompressResult decompressResult = DQLZS.decompress(sb.data, sb.sizeUncompressed, debug);
+            DecompressResult decompressResult = DQLZS.decompress(sb.data, sb.sizeUncompressed, false);
          
-            CompressResult compressResult = DQLZS.compress(decompressResult.data, debug);
+            CompressResult compressResult = DQLZS.compress(decompressResult.data, false, decompressResult);
             
             //-2 length diff
             //-1 is equal
@@ -649,12 +649,11 @@ public class Main {
             if(/*cmp >= 0 &&*/ showHex) {
                 String original = Utils.toHexDump(sb.data, 16, true, false, null);
                 String compressed = Utils.toHexDump(compressResult.data, 16, true, false, null);
-                System.out.println("original compression:\n" + original + "\nmy compression:\n" + compressed);
+                
+                System.out.println(Utils.splitScreen("my compression:\n" + compressed, 90, "original compression:\n" + original));
+                
                 int a = 0;
             }
-            
-            
-            
             
             p.printRecord(
                     sb.getPath(),

@@ -541,4 +541,32 @@ public class Utils {
         }
         return l;
     }
+    
+    public static String splitScreen(String left, int w, String right) {
+        StringBuilder sb = new StringBuilder();
+        
+        String[] leftLines = left.split("\n");
+        String[] rightLines = right.split("\n");
+        
+        for(int i = 0; i < Math.max(leftLines.length, rightLines.length); i++) {
+            
+            String l = i >= leftLines.length ? "" : leftLines[i];
+            String r = i >= rightLines.length ? "" : rightLines[i];
+            
+            l = l.replace("\t", "    ");
+            r = r.replace("\t", "    ");
+            
+            if(l.length() > w) {
+                l = l.substring(0, w - 3) + "...";
+            } else if(l.length() < w) {
+                while(l.length() < w) {
+                    l += " ";
+                }
+            }
+            
+            sb.append(l + " | " + r + "\n");
+        }
+        
+        return sb.toString();
+    } 
 }

@@ -2,7 +2,9 @@ package net.markus.projects.dh4;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import net.markus.projects.dh4.util.Utils;
 
 /**
@@ -11,6 +13,7 @@ import net.markus.projects.dh4.util.Utils;
 public class DQLZS {
 
     private static boolean DEBUG = false;
+    private static boolean ASSERT = true;
 
     public static DecompressResult decompress(byte[] compressed, int decompressSize, boolean debug) {
         boolean b = DEBUG;
@@ -25,6 +28,7 @@ public class DQLZS {
     public static DecompressResult decompress(byte[] compressed, int decompressSize) {
 
         DecompressResult result = new DecompressResult();
+        result.compressed = compressed;
 
         //2^12 = 4096
         byte[] buffer = new byte[4096];
@@ -55,10 +59,14 @@ public class DQLZS {
 
                 offsetCompressed++;
 
+                StringBuilder logSB = new StringBuilder();
+                
                 if (DEBUG) {
                     System.out.println();
                     System.out.println("control byte at offset=" + offsetCompressed + " " + controlByteBits + " | 0x" + Utils.bytesToHex(new byte[]{controlByte}));
                 }
+                
+                logSB.append("control byte at offset=" + offsetCompressed + " " + controlByteBits + " | 0x" + Utils.bytesToHex(new byte[]{controlByte}) + "\n");
 
                 boolean fullBreak = false;
 
@@ -76,6 +84,8 @@ public class DQLZS {
                         if (DEBUG) {
                             System.out.println("write literal at offset=" + offsetCompressed + " | " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{literal}) + " | 0x" + Utils.bytesToHex(new byte[]{literal}));
                         }
+                        logSB.append("write literal at offset=" + offsetCompressed + " | " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{literal}) + " | 0x" + Utils.bytesToHex(new byte[]{literal}) + "\n");
+                        
                         offsetCompressed++;
                         offsetDecompressed++;
                         offsetBuffer++;
@@ -115,23 +125,25 @@ public class DQLZS {
                         int storedOff = off;
                         off = (off + 18) % maxOff;
 
-                        if (DEBUG) {
-                            String line = String.format("reference at offsetComp=%d/%d offsetDecomp=%d/%d offsetBuff=%d len=%d off=%d storedOff=%d offDiff=%d full=%s offStr=%s refBytesBits=%s | %s",
+                        
+                        String line = String.format("reference at len=%d off=%d storedOff=%d offsetComp=%d/%d offsetDecomp=%d/%d offsetBuff=%d offDiff=%d full=%s offStr=%s refBytesBits=%s | %s",
+                                    len,
+                                    off,
+                                    storedOff,
                                     offsetCompressed,
                                     compressed.length,
                                     offsetDecompressed,
                                     decompressSize,
                                     offsetBuffer,
-                                    len,
-                                    off,
-                                    storedOff,
                                     maxOff - off,
                                     Arrays.asList(p1, p2, p3, p4),
                                     offStr,
                                     refBytesBits,
                                     Utils.bytesToHex(refBytes)
-                            );
-
+                        );
+                        
+                        logSB.append(line + "\n");
+                        if (DEBUG) {
                             System.out.println(line);
                         }
 
@@ -145,6 +157,7 @@ public class DQLZS {
                             if (DEBUG) {
                                 System.out.println("\twrite referred " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{literal}) + " | 0x" + Utils.bytesToHex(new byte[]{literal}));
                             }
+                            logSB.append("\twrite referred " + (literal & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{literal}) + " | 0x" + Utils.bytesToHex(new byte[]{literal}) + "\n");
 
                             offsetDecompressed++;
                             offsetBuffer++;
@@ -168,6 +181,8 @@ public class DQLZS {
                 }
 
                 int a = 0;
+                
+                result.logging.add(logSB.toString());
 
             }//while
 
@@ -214,6 +229,10 @@ public class DQLZS {
         public int offsetBuffer;
 
         public String stopReason = "";
+        
+        public byte[] compressed;
+        
+        public List<String> logging = new ArrayList<>();
 
         public void setBeginEnd(long begin, long end) {
             this.begin = begin;
@@ -231,17 +250,17 @@ public class DQLZS {
 
     }
 
-    public static CompressResult compress(byte[] decompressed, boolean debug) throws IOException {
+    public static CompressResult compress(byte[] decompressed, boolean debug, DecompressResult decompResult) throws IOException {
         boolean b = DEBUG;
         DEBUG = debug;
 
-        CompressResult result = compress(decompressed);
+        CompressResult result = compress(decompressed, decompResult);
         DEBUG = b;
 
         return result;
     }
 
-    public static CompressResult compress(byte[] decompressed) throws IOException {
+    public static CompressResult compress(byte[] decompressed, DecompressResult decompResult) throws IOException {
 
         CompressResult result = new CompressResult();
 
@@ -253,7 +272,7 @@ public class DQLZS {
 
             int decompressedIndex = 0;
             int bufferIndex = 0;
-            int bufferSize = 0;
+            //int bufferSize = 0;
 
             while (decompressedIndex < decompressed.length) {
 
@@ -261,6 +280,9 @@ public class DQLZS {
 
                 //write here the data: literals or refs
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                
+                StringBuilder logSB = new StringBuilder();
+                logSB.append("control byte\n");
 
                 //control byte => use their bits
                 //1 = literal
@@ -275,19 +297,19 @@ public class DQLZS {
 
                     //assumption: it will match
                     boolean match = true;
+                    
+                    if(controlByteIndex == 7 && result.logging.size() == 2) {
+                        int uiae = bufferIndex;
+                        
+                        //bufferIndex == 68
+                        int a = 0;
+                    }
 
                     //8+4+2+1 = 15 
                     //4 bits=15 + 3 = 18 max
-                    //look at block 25336/0, it seems that it can not read longer than buffer was written
-                    //int initLen = Math.min(bufferSize, 18);
-                    //if(initLen < 3) {
-                    //    initLen = 3;
-                    //}
                     for (len = 18; len >= 3; len--) {
 
                         match = true;
-                        
-                        
 
                         for (off = buffer.length - len; off >= 0; off--) {
                         //for (off = 0; off < buffer.length - len; off++) {
@@ -324,34 +346,17 @@ public class DQLZS {
                                     break;
                                 }
                             }
-                            
-                            //if(DEBUG) {
-                            //    System.out.println("test len=" + len + ", off=" + off + ", match=" + match + ", off+len=" + (off+len));
-                            //}
 
                             if (match) {
                                 //this offset worked
                                 break;
                             }
+                            
                         }//off
 
                         if (match) {
                             //this len worked
-                            
-                            //it seems to be that len + off can never by larger then bufferIndex (buffer size)
-                            //if(len + off != buffer.length && len + off > bufferIndex) {
-                                
-                                //try another len
-                            //    int a = 0;
-                            //    if(DEBUG) {
-                            //        System.out.println("len + off > bufferIndex: " + (len + off) + " > " + bufferIndex);
-                            //    }
-                                
-                            //} else {
-                            
-                                //break means the len and off are fine
-                                break;
-                            //}
+                            break;
                         }
                         
                     }//len
@@ -385,43 +390,31 @@ public class DQLZS {
                                 //System.out.println("controlByteIndex=" + controlByteIndex + ", literal with litValue=" + litValue);
                                 System.out.println("write literal at offset=" + (decompressedIndex-1) + " | " + (litValue & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{litValue}) + " | 0x" + Utils.bytesToHex(new byte[]{litValue}));
                             }
-
+                            logSB.append("write literal at offset=" + (decompressedIndex-1) + " | " + (litValue & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{litValue}) + " | 0x" + Utils.bytesToHex(new byte[]{litValue}) + "\n");
+                            
+                            
                         } else {
                             controlByteBits += "0";
-
-                            if (DEBUG) {
-                                System.out.println("controlByteIndex=" + controlByteIndex + ", ref with len=" + len + ", off=" + off);
-                            }
-
+                            
                             //skip the bytes we have compressed with a ref
                             decompressedIndex += len;
-
+                            
                             //write also to buffer
-                            for (int i = 0; i < len; i++) {
+                            int bi = off;
+                            for (int patternIndex = 0; patternIndex < len; patternIndex++) {
                                 
-                                int index = (off + i); //% buffer.length;
+                                byte bufferByte = buffer[bi];
                                 
-                                byte lit = buffer[index];
+                                buffer[bufferIndex + patternIndex] = bufferByte;
                                 
-                                buffer[bufferIndex] = lit;
-                                bufferIndex++;
-                                
-                                if (DEBUG) {
-                                    System.out.println("\tbuffer referred [off="+off+", index=" + index + ", bufferIndex="+bufferIndex+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}));
+                                //it seems to cycle this way: if it is larger then bufferIndex it starts at offset again
+                                bi++;
+                                if(bi > bufferIndex - 1) {
+                                    bi = off;
                                 }
-                                
                             }
-                            //bufferIndex += len;
+                            bufferIndex += len;
                             bufferIndex = bufferIndex % buffer.length;
-                            
-                            if (DEBUG) {
-                                //System.out.println("controlByteIndex=" + controlByteIndex + ", ref with len=" + len + ", off=" + off);
-                                
-                                //System.out.println("buffer");
-                                //System.out.println(Utils.toHexDump(Arrays.copyOfRange(buffer, 0, 64 * 2), 64));
-                            }
-                            
-                            
 
                             //bufferSize += len;
                             //if (bufferSize > buffer.length) {
@@ -457,17 +450,26 @@ public class DQLZS {
 
                             baos.write(refBytes);
 
+                            String line = String.format("reference: len=%d off=%d storeOffset=%d full=%s offStr=%s refBytesBits=%s refBytesHex=%s",
+                                    len,
+                                    off,
+                                    storeOffset,
+                                    Arrays.asList(p1, p2, p3, lenBits),
+                                    offsetBits,
+                                    refBytesBits,
+                                    refBytesHex
+                            );
                             if (DEBUG) {
-                                String line = String.format("reference: len=%d off=%d storeOffset=%d full=%s offStr=%s refBytesBits=%s refBytesHex=%s",
-                                        len,
-                                        off,
-                                        storeOffset,
-                                        Arrays.asList(p1, p2, p3, lenBits),
-                                        offsetBits,
-                                        refBytesBits,
-                                        refBytesHex
-                                );
                                 System.out.println(line);
+                            }
+                            logSB.append(line + "\n");
+                            for (int i = 0; i < len; i++) {
+                                int index = (off + i);
+                                byte lit = buffer[index];
+                                if (DEBUG) {
+                                    System.out.println("\tbuffer referred [off="+off+", index=" + index + ", bufferIndex="+bufferIndex+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}));
+                                }
+                                logSB.append("\tbuffer referred [off="+off+", index=" + index + ", bufferIndex="+bufferIndex+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}) + "\n");
                             }
 
                         }//ref else
@@ -495,12 +497,38 @@ public class DQLZS {
                 output.write(controlByte);
                 output.write(baos.toByteArray());
 
+                
+                
+                logSB.append("control byte stored: " + controlByteBits + " 0x" + controlByteHex + ", output.size=" + output.size() + "\n");
                 if (DEBUG) {
                     System.out.println("control byte stored: " + controlByteBits + " 0x" + controlByteHex + ", output.size=" + output.size());
                     System.out.println();
                 }
-            }
+                
+                result.logging.add(logSB.toString());
+                
+                if(ASSERT) {
+                    byte[] currentOutput = output.toByteArray();
+                    for(int i = 0; i < currentOutput.length; i++) {
+                        if(decompResult.compressed[i] != currentOutput[i]) {
 
+                            int logIndex = result.logging.size() - 1;
+                            String decompLog = decompResult.logging.get(logIndex);
+
+                            String screen = Utils.splitScreen(
+                                    "my compression\n" + result.logging.get(logIndex), 
+                                    110, 
+                                    "given decompression\n" + decompLog
+                            );
+
+                            System.out.println(screen);
+                            System.exit(0);
+                        }
+                    }
+                }
+                
+            }//while
+            
             result.data = output.toByteArray();
 
         } catch (Exception e) {
@@ -527,6 +555,8 @@ public class DQLZS {
         public long end;
 
         public String stopReason = "";
+        
+        public List<String> logging = new ArrayList<>();
 
         public void setBeginEnd(long begin, long end) {
             this.begin = begin;
