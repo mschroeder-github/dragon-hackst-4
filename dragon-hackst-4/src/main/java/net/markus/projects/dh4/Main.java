@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import javax.imageio.ImageIO;
+import net.markus.projects.dh4.DQLZS.CompressResult;
 import net.markus.projects.dh4.DQLZS.DecompressResult;
 import net.markus.projects.dh4.data.DQFiles;
 import net.markus.projects.dh4.data.Found;
@@ -56,13 +57,14 @@ public class Main {
         //analyseTextBlocksV2(hbd);
         //inspectWithGUI(hbd);
         //RAMmap(hbd, new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/memory-hexdump"));
-        translationPreparation(hbd, dqFiles);
+        //translationPreparation(hbd, dqFiles);
         //translationEmbedding(hbd, psexe, dqFiles);
         //translationEmbeddingV2(hbd, psexe, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //h60010108Blocks(hbd);
         //lzsDecompressionEvaluation(hbd);
+        lzsCompressionEvaluation(hbd);
         //timExtraction(hbd);
         //veryFirstBlock(hbd);
         //fontImages(hbd);
@@ -534,7 +536,7 @@ public class Main {
         File lzsEvaluationFolder = new File("lzsEvaluation");
         lzsEvaluationFolder.mkdir();
         
-        CSVPrinter p = CSVFormat.DEFAULT.print(new File(lzsEvaluationFolder, "results.csv"), StandardCharsets.UTF_8);
+        CSVPrinter p = CSVFormat.DEFAULT.print(new File(lzsEvaluationFolder, "decompression.csv"), StandardCharsets.UTF_8);
         
         p.printRecord(
                 "path",
@@ -582,6 +584,96 @@ public class Main {
         }
         
         p.close();
+        
+    }
+    
+    private static void lzsCompressionEvaluation(HBD1PS1D hbd) throws IOException {
+        
+        int all = hbd.getStarZerosSubBlocks().size();
+        List<StarZerosSubBlock> compressedList = hbd.getStarZerosSubBlocksCompressed();
+        
+        //only cut scene blocks
+        compressedList = hbd.getType2StarZerosSubBlocksMap().get(39);
+        compressedList.removeIf(sb -> !sb.compressed);
+        compressedList.sort((a,b) -> Integer.compare(a.size, b.size));
+        
+        //compressed: 5967/23828
+        System.out.println("compressed: " + compressedList.size() + "/" + all);
+        
+        File lzsEvaluationFolder = new File("lzsEvaluation");
+        lzsEvaluationFolder.mkdir();
+        
+        CSVPrinter p = CSVFormat.DEFAULT.print(new File(lzsEvaluationFolder, "compression.csv"), StandardCharsets.UTF_8);
+        
+        boolean debug = false;
+        boolean showHex = false;
+        
+        Set<String> pathWhitelist = new HashSet<>();
+        //pathWhitelist.add("25336/0");
+        
+        for(StarZerosSubBlock sb : compressedList) {
+            
+            if(!pathWhitelist.isEmpty() && !pathWhitelist.contains(sb.getPath())) {
+                continue;
+            }
+            
+            if(debug) {
+                System.out.println();
+                System.out.println(sb.getPath() + " ======================================");
+                System.out.println();
+            }
+            
+            DecompressResult decompressResult = DQLZS.decompress(sb.data, sb.sizeUncompressed, debug);
+         
+            CompressResult compressResult = DQLZS.compress(decompressResult.data, debug);
+            
+            //-2 length diff
+            //-1 is equal
+            int compressedCmp = Utils.compare(sb.data, compressResult.data);
+            
+            DecompressResult decompressFromMeResult = DQLZS.decompress(compressResult.data, sb.sizeUncompressed);
+            int decompressedCmp = Utils.compare(decompressFromMeResult.data, decompressResult.data);
+            
+            System.out.println(
+                    sb.getPath() + 
+                    " cmp=" + compressedCmp + 
+                    ", equal=" + (compressedCmp == -1) + 
+                            
+                    ", sb.data.length=" + sb.data.length + 
+                    ", compressResult.data.length=" + compressResult.data.length +
+                            
+                    " dcmp=" + decompressedCmp + 
+                    ", dequal=" + (decompressedCmp == -1)
+            );
+            
+            if(/*cmp >= 0 &&*/ showHex) {
+                String original = Utils.toHexDump(sb.data, 16, true, false, null);
+                String compressed = Utils.toHexDump(compressResult.data, 16, true, false, null);
+                System.out.println("original compression:\n" + original + "\nmy compression:\n" + compressed);
+                int a = 0;
+            }
+            
+            
+            
+            
+            p.printRecord(
+                    sb.getPath(),
+                    sb.size,
+                    sb.type,
+                    compressResult.exception != null,
+                    compressResult.exception != null ? compressResult.exception.getMessage() : "",
+                    compressResult.exception != null ? compressResult.exception.getClass().getSimpleName() : "",
+                    compressResult.getDuration(),
+                    compressResult.stopReason,
+                    compressResult.data.length,
+                    compressedCmp,
+                    compressedCmp == -1,
+                    decompressedCmp,
+                    decompressedCmp == -1
+            );
+            
+            //break;
+        }
         
     }
     

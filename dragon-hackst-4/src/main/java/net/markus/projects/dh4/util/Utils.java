@@ -143,7 +143,7 @@ public class Utils {
     public static String toBits(byte b) {
         return Integer.toBinaryString((b & 0xFF) + 0x100).substring(1);
     }
-
+    
     public static int bitsToIntLE(String bits) {
         int n = 0;
         for (int i = bits.length() - 1; i >= 0; i--) {
@@ -298,6 +298,10 @@ public class Utils {
         return toHexString(array, cut);
     }
 
+    public static String toHexDump(byte[] bytes, int w) {
+        return toHexDump(bytes, w, true, false, null);
+    }
+    
     public static String toHexDump(byte[] bytes, int w, boolean address, boolean ascii, Map<Short, Character> sjishort2char) {
         int h = (bytes.length / w) + 1;
 
