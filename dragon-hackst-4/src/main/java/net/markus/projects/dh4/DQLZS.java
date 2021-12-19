@@ -267,11 +267,13 @@ public class DQLZS {
         try {
 
             ByteArrayOutputStream output = new ByteArrayOutputStream();
-
-            byte[] buffer = new byte[4096];
+            
+            Buffer bufferObj = new Buffer();
+            bufferObj.debug = true;
 
             int decompressedIndex = 0;
-            int bufferIndex = 0;
+            
+            //int bufferIndex = 0;
             //int bufferSize = 0;
 
             while (decompressedIndex < decompressed.length) {
@@ -290,79 +292,21 @@ public class DQLZS {
                 for (int controlByteIndex = 0; controlByteIndex < 8; controlByteIndex++) {
                     //decide if literal or ref
 
-                    //ok we have to check if we find a pattern that is larger than 3 bytes
-                    //in the buffer
-                    int len = 0;
-                    int off = 0;
-
-                    //assumption: it will match
-                    boolean match = true;
+                    //we try to find a match in the buffer for the 18 bytes in the decompressed
+                    byte[] decompressedMatchable = Arrays.copyOfRange(
+                            decompressed, 
+                            decompressedIndex, 
+                            Math.min(decompressedIndex + 18, decompressed.length)
+                    );
                     
-                    if(controlByteIndex == 7 && result.logging.size() == 2) {
-                        int uiae = bufferIndex;
-                        
-                        //bufferIndex == 68
-                        int a = 0;
-                    }
-
-                    //8+4+2+1 = 15 
-                    //4 bits=15 + 3 = 18 max
-                    for (len = 18; len >= 3; len--) {
-
-                        match = true;
-
-                        for (off = buffer.length - len; off >= 0; off--) {
-                        //for (off = 0; off < buffer.length - len; off++) {
-                        
-                            match = true;
-
-                            //buffer index
-                            int bi = off;
-                            
-                            //check the full pattern
-                            for (int patternIndex = 0; patternIndex < len; patternIndex++) {
-
-                                //pattern would be larger than decompressed data
-                                if (patternIndex + decompressedIndex >= decompressed.length) {
-                                    match = false;
-                                    break;
-                                }
-
-                                byte decompByte = decompressed[patternIndex + decompressedIndex];
-                                //no '% buffer.length'
-                                //it seems not to cycle in the buffer
-                                byte bufferByte = buffer[bi]; //buffer[(patternIndex + off)]; 
-                                
-                                //it seems to cycle this way: if it is larger then bufferIndex it starts at offset again
-                                bi++;
-                                if(bi > bufferIndex - 1) {
-                                    bi = off;
-                                }
-
-                                //% buffer.length => it can cycle I guess
-                                if (decompByte != bufferByte) {
-                                    //try another offset
-                                    match = false;
-                                    break;
-                                }
-                            }
-
-                            if (match) {
-                                //this offset worked
-                                break;
-                            }
-                            
-                        }//off
-
-                        if (match) {
-                            //this len worked
-                            break;
-                        }
-                        
-                    }//len
+                    //System.out.println("\ndecompressed");
+                    //System.out.println(Utils.toHexDump(Arrays.copyOfRange(decompressed, 0, bufferObj.size), 50));
+                    
+                    BufferMatch bufferMatchObj = bufferObj.matchV2(decompressedMatchable, decompressedIndex);
 
                     //-------------------
-                    boolean literal = !match;
+                    
+                    boolean literal = !bufferMatchObj.match;
 
                     if (decompressedIndex < decompressed.length) {
                         //if there is still decompressed data that can be compressed
@@ -374,17 +318,9 @@ public class DQLZS {
 
                             //write literal
                             baos.write(litValue);
-
+                            
                             //write also to buffer
-                            buffer[bufferIndex] = litValue;
-                            bufferIndex++;
-                            bufferIndex = bufferIndex % buffer.length;
-
-                            //we remember current buffer size
-                            //bufferSize++;
-                            //if (bufferSize > buffer.length) {
-                            //    bufferSize = buffer.length;
-                            //}
+                            bufferObj.fill(litValue);
 
                             if (DEBUG) {
                                 //System.out.println("controlByteIndex=" + controlByteIndex + ", literal with litValue=" + litValue);
@@ -392,38 +328,23 @@ public class DQLZS {
                             }
                             logSB.append("write literal at offset=" + (decompressedIndex-1) + " | " + (litValue & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{litValue}) + " | 0x" + Utils.bytesToHex(new byte[]{litValue}) + "\n");
                             
-                            
                         } else {
                             controlByteBits += "0";
                             
+                            int len = bufferMatchObj.length;
+                            int off = bufferMatchObj.offset;
+                            
+                            //the 00 00 0b case
+                            if(len == 3 && off == 4094) {
+                                int a = 0;
+                            }
+                            
                             //skip the bytes we have compressed with a ref
                             decompressedIndex += len;
-                            
-                            //write also to buffer
-                            int bi = off;
-                            for (int patternIndex = 0; patternIndex < len; patternIndex++) {
-                                
-                                byte bufferByte = buffer[bi];
-                                
-                                buffer[bufferIndex + patternIndex] = bufferByte;
-                                
-                                //it seems to cycle this way: if it is larger then bufferIndex it starts at offset again
-                                bi++;
-                                if(bi > bufferIndex - 1) {
-                                    bi = off;
-                                }
-                            }
-                            bufferIndex += len;
-                            bufferIndex = bufferIndex % buffer.length;
-
-                            //bufferSize += len;
-                            //if (bufferSize > buffer.length) {
-                            //    bufferSize = buffer.length;
-                            //}
 
                             int storeOffset = off - 18;
                             if (storeOffset < 0) {
-                                storeOffset = buffer.length + storeOffset;
+                                storeOffset = bufferObj.buffer.length + storeOffset;
                             }
                             int storeLen = len - 3;
 
@@ -465,11 +386,11 @@ public class DQLZS {
                             logSB.append(line + "\n");
                             for (int i = 0; i < len; i++) {
                                 int index = (off + i);
-                                byte lit = buffer[index];
+                                byte lit = bufferObj.buffer[index % bufferObj.buffer.length];
                                 if (DEBUG) {
-                                    System.out.println("\tbuffer referred [off="+off+", index=" + index + ", bufferIndex="+bufferIndex+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}));
+                                    System.out.println("\tbuffer referred [off="+off+", index=" + index + ", buffer.size="+bufferObj.size+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}));
                                 }
-                                logSB.append("\tbuffer referred [off="+off+", index=" + index + ", bufferIndex="+bufferIndex+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}) + "\n");
+                                logSB.append("\tbuffer referred [off="+off+", index=" + index + ", buffer.size="+bufferObj.size+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}) + "\n");
                             }
 
                         }//ref else
@@ -496,8 +417,6 @@ public class DQLZS {
 
                 output.write(controlByte);
                 output.write(baos.toByteArray());
-
-                
                 
                 logSB.append("control byte stored: " + controlByteBits + " 0x" + controlByteHex + ", output.size=" + output.size() + "\n");
                 if (DEBUG) {
@@ -535,6 +454,8 @@ public class DQLZS {
 
             result.exception = e;
             result.data = new byte[0];
+            
+            e.printStackTrace();
             
             if (DEBUG) {
                 throw e;
@@ -574,4 +495,444 @@ public class DQLZS {
 
     }
 
+    //extra implementation of the buffer for compression
+    private static class Buffer {
+        
+        public byte[] buffer;
+        public int size;
+        
+        public boolean debug;
+        
+        @Deprecated
+        public int lastOffset;
+        
+        public static final int MAX_SIZE = 4096;
+        
+        public List<BufferMatch> matchHistory = new ArrayList<>();
+
+        public Buffer() {
+            buffer = new byte[MAX_SIZE];
+            size = 0;
+        }
+        
+        public BufferMatch match(byte[] data18bytes, int decompressedIndex) {
+            
+            println("===============================================");
+            println("match method begin, decompressedIndex=" + decompressedIndex + ", buffer.size=" + size + ", data18bytes=" + Utils.toHexString(data18bytes));
+            println(this.toString());
+            
+            int a = 0;
+            
+            //the minimum match is 3 bytes
+            while(data18bytes.length >= 3) {
+                
+                List<BufferMatch> matches = new ArrayList<>();
+                
+                //checking makes only sense if buffer is filled
+                if(size > 0) {
+
+                    //from off to size
+                    //      [data18bytes ........]
+                    //[ --- |off< ---- size]
+                    //thus, from off to (size - 1)
+                    //4096 - 18 = 4078
+                    //                             4094 4095 0          
+                    //starting at 4094 is possible 0x00 0x00 0xb0
+                    
+                    int startOffset = size - 1; //!matchHistory.isEmpty() ? matchHistory.get(matchHistory.size() - 1).offset : size - 1;
+                    
+                    for(int off = startOffset; off >= -data18bytes.length; off--) {
+                    //for(int off = -data18bytes.length; off < size; off++) {
+
+                        //at the border at index=0 we have to go to the end of the buffer 4095
+                        int offset = off;
+                        if(offset < 0) {
+                            offset = buffer.length + off;
+                        }
+                        
+                        //but cycle from |off to size
+                        CyclicBuffer cyclicBuffer = cyclicBuffer(offset, data18bytes.length);
+                        //println("checking off=" + off + " with size=" + size + ", cyclicBuffer is " + Utils.toHexString(cyclicBuffer));
+                        
+                        int cmp = Utils.compare(data18bytes, cyclicBuffer.data);
+                        if(cmp == -1) {
+                            //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
+                            
+                            //if it matches, this length/offset combination works
+                            BufferMatch match = new BufferMatch(true, offset, Arrays.copyOf(data18bytes, data18bytes.length));
+                            match.cyclicBuffer = cyclicBuffer;
+                            //println("found " + match.toString() + " for data (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
+                            
+                            matches.add(match);
+                            
+                            //first match of zeros is the right one?
+                            //answer: no, if len=18 the last match is used
+                            //if(onlyZeros(data18bytes)) {
+                            //    break;
+                            //}
+                        }
+                    }
+                }
+                
+                
+                //we found matches
+                if(!matches.isEmpty()) {
+                    
+                    BufferMatch selected = null;
+                    
+                    //maybe last offset decides
+                    //matches.sort((a,b) -> Integer.compare(a.getDiffToLastOffset(), b.getDiffToLastOffset()));
+                    
+                    println("decompressedIndex=" + decompressedIndex + ", buffer.size=" + size);
+                    
+                    println("history: "+ matchHistory.size());
+                    for(int i = 0; i < matchHistory.size(); i++) {
+                        println("\t[" + i + "] " + matchHistory.get(i));
+                    }
+                    println("matches: "+ matches.size());
+                    matches.forEach(m -> println("\t" + m.toString()));
+                    
+                    //32 is the max
+                    //we found something at 7
+                    
+                    //decompressedIndex=32, buffer.size=8, offset=7, length=16,
+                    //20 = 32 - 12 
+                    //reference: len=16 off=7 | reference at len=12 off=20 
+                    
+                    //default: take the first one
+                    selected = matches.get(0);
+                    
+                    //if(onlyZeros(selected.pattern)) {
+                    //    fillArray(selected.pattern);
+                    //}
+                    
+                    //keep history
+                    matchHistory.add(selected);
+                    
+                    println("selected " + selected.toString() + "\n");
+                    
+                    return selected;
+                }
+                
+                //we try if a smaller byte sequence matches
+                data18bytes = Arrays.copyOfRange(data18bytes, 0, data18bytes.length - 1);
+            }
+            
+            //we tried everything but there is no match
+            BufferMatch match = new BufferMatch();
+            match.pattern = new byte[] { data18bytes[0] };
+            match.length = 1;
+            match.offset = decompressedIndex;
+            //lastOffset = buffer.length - 18;
+            println("no match " + match +"\n");
+            
+            matchHistory.add(match);
+            return match;
+        }
+
+        public BufferMatch matchV2(byte[] data18bytes, int decompressedIndex) {
+            
+            println("===============================================");
+            println("match method begin, decompressedIndex=" + decompressedIndex + ", buffer.size=" + size + ", data18bytes=" + Utils.toHexString(data18bytes));
+            println("history: "+ matchHistory.size());
+            for(int i = 0; i < matchHistory.size(); i++) {
+                println("\t[" + i + "] " + matchHistory.get(i));
+            }
+            //println(this.toString());
+            
+            int a = 0;
+            
+            //the minimum match is 3 bytes
+            while(data18bytes.length >= 3) {
+                
+                List<BufferMatch> matches = new ArrayList<>();
+                
+                //checking makes only sense if buffer is filled
+                if(size > 0) {
+
+                    for(int i = matchHistory.size() - 1; i >= 0; i--) {
+                        
+                        //was not these special zeros
+                        if(!matchHistory.get(i).zerosFromBehind) {
+                            
+                            byte[] seq = historyBufferSeq(i, data18bytes.length);
+                            
+                            int cmp = Utils.compare(data18bytes, seq);
+                            if(cmp == -1) {
+                                //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
+
+                                //if it matches, this length/offset combination works
+                                BufferMatch match = new BufferMatch(true, matchHistory.get(i).offset, Arrays.copyOf(data18bytes, data18bytes.length));
+                                matches.add(match);
+                            }
+                        }
+                    }
+                    
+                    if(onlyZeros(data18bytes)) {
+                        BufferMatch match = new BufferMatch(true, buffer.length - data18bytes.length, Arrays.copyOf(data18bytes, data18bytes.length));
+                        match.zerosFromBehind = true;
+                        matches.add(match);
+                    }
+                    
+                    
+                }// size > 0
+                
+                
+                //we found matches
+                if(!matches.isEmpty()) {
+                    
+                    BufferMatch selected = null;
+                    
+                    /*
+                    println("history: "+ matchHistory.size());
+                    for(int i = 0; i < matchHistory.size(); i++) {
+                        println("\t[" + i + "] " + matchHistory.get(i));
+                    }
+                    */
+                    println("matches: "+ matches.size());
+                    matches.forEach(m -> println("\t" + m.toString()));
+                    
+                    //32 is the max
+                    //we found something at 7
+                    
+                    //decompressedIndex=32, buffer.size=8, offset=7, length=16,
+                    //20 = 32 - 12 
+                    //reference: len=16 off=7 | reference at len=12 off=20 
+                    
+                    //default: take the first one
+                    selected = matches.get(0);
+                    
+                    //if(onlyZeros(selected.pattern)) {
+                    //    fillArray(selected.pattern);
+                    //}
+                    
+                    //keep history
+                    matchHistory.add(selected);
+                    
+                    println("selected " + selected.toString() + "\n");
+                    
+                    return selected;
+                }
+                
+                //we try if a smaller byte sequence matches
+                data18bytes = Arrays.copyOfRange(data18bytes, 0, data18bytes.length - 1);
+            }
+            
+            //we tried everything but there is no match
+            BufferMatch match = new BufferMatch();
+            match.pattern = new byte[] { data18bytes[0] };
+            match.length = 1;
+            match.offset = decompressedIndex;
+            //lastOffset = buffer.length - 18;
+            println("no match " + match +"\n");
+            matchHistory.add(match);
+            return match;
+        }
+        
+        private byte[] historyBufferSeq(int historyIndex, int len) {
+            
+            ByteArrayOutputStream seq = new ByteArrayOutputStream();
+            
+            for(int i = historyIndex; i < matchHistory.size(); i++) {
+                
+                byte[] pattern = matchHistory.get(i).pattern;
+                for(int j = 0; j < pattern.length; j++) {
+                    
+                    seq.write(pattern[j]);
+                    
+                    if(seq.size() >= len) {
+                        break;
+                    }
+                }
+                
+                if(seq.size() >= len) {
+                    break;
+                }
+                
+                //cycles
+                if(i == matchHistory.size() - 1) {
+                    i = historyIndex - 1;
+                    //after that i++ so we start again at historyIndex
+                }
+            }
+            
+            return seq.toByteArray();
+        }
+        
+        private int maxZeroSeq(byte[] data18bytes) {
+            int count = 0;
+            for(int i = 0; i < data18bytes.length; i++) {
+                if(data18bytes[i] == 0) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+            return count;
+        }
+        
+        private boolean onlyZeros(byte[] data18bytes) {
+            return maxZeroSeq(data18bytes) == data18bytes.length;
+        }
+        
+        private CyclicBuffer cyclicBuffer(int off, int len) {
+            //off can be 4095 thus we have to mod 4096
+            
+            CyclicBuffer b = new CyclicBuffer();
+            
+            b.data = new byte[len];
+            int offsetIndex = off;
+            for(int i = 0; i < len; i++) {
+                b.data[i] = buffer[offsetIndex];
+                offsetIndex++;
+                
+                //cycle in buffer, e.g. 4096 becomes 0
+                offsetIndex %= buffer.length;
+                
+                //special case: after one step we reach the end
+                //if(i == 0 && offsetIndex == size) {
+                //    //remaining bytes are 0
+                //    b.specialOneStep = true;
+                //    break;
+                //}
+                
+                //cyclic break point
+                /*
+                if(offsetIndex == size) {
+                    
+                    offsetIndex = off; //02 00 00 68 | 02 00 00
+                    //also 18 times 00 can be cycled
+                    
+                    //if(b.data[i] != 0) {
+                    //    offsetIndex = off; //02 00 00 68 | 02 00 00
+                    //} else {
+                    //    offsetIndex = 0;
+                    //}
+                    
+                    b.sizeReached = true;
+                    
+                    //set as cycled, there are still some bytes
+                    b.cycled = i < (len - 1);
+                }
+                */
+            }
+            
+            return b;
+        }
+        
+        //is called by match to fill the buffer
+        public void fillArray(byte[] dataBytes) {
+            //println("buffer fill " + Utils.toHexString(dataBytes));
+            
+            for(int i = 0; i < dataBytes.length; i++) {
+                fill(dataBytes[i]);
+            }
+        }
+        
+        //is called by compress to add a literal
+        public void fill(byte dataByte) {
+            buffer[size] = dataByte;
+            size++;
+            
+            //TODO loop
+            if(size == buffer.length) {
+                int a = 0;
+            }
+        }
+        
+        private void println(String line) {
+            if(debug) {
+                System.out.println(line);
+            }
+        }
+        
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Buffer{size=" + size + "}\n");
+            sb.append(Utils.toHexDump(Arrays.copyOfRange(buffer, 0, size), 50));
+            
+            return sb.toString();
+        }
+        
+    }
+    
+    private static class CyclicBuffer {
+        
+        public byte[] data;
+        public boolean cycled;
+        public boolean sizeReached;
+        //public boolean specialOneStep;
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CyclicBuffer{data.len=").append(data.length);
+            sb.append(", cycled=").append(cycled);
+            sb.append(", sizeReached=").append(sizeReached);
+            sb.append('}');
+            return sb.toString();
+        }
+
+        
+    }
+    
+    private static class BufferMatch {
+        public boolean match;
+        public int offset;
+        public int length;
+        public byte[] pattern;
+        public int lastOffset;
+        public CyclicBuffer cyclicBuffer;
+        public boolean zerosFromBehind;
+
+        public BufferMatch() {
+            match = false;
+        }
+        
+        public BufferMatch(boolean match, int offset, byte[] pattern) {
+            this.match = match;
+            this.offset = offset;
+            this.pattern = pattern;
+            this.lastOffset = lastOffset;
+            this.length = pattern.length;
+        }
+        
+        @Deprecated
+        public int getDiffToLastOffset() {
+            
+            //between 4093 and 0 should be diff=3
+            //thus, 4093 - 4096 = -3 to 0, diff=3
+            int diff1 = Math.abs((offset - Buffer.MAX_SIZE) - lastOffset);
+            
+            //but also 60 to 70, diff=10
+            int diff2 = Math.abs(offset - lastOffset);
+            
+            int diff = Math.min(diff1, diff2);
+            return diff;
+        }
+        
+        //@Override
+        //public String toString() {
+        //    return "BufferMatch{" + "match=" + match + ", offset=" + offset + ", length=" + length + '}';
+        //}
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("BufferMatch{match=").append(match);
+            sb.append(", offset=").append(offset);
+            sb.append(", length=").append(length);
+            sb.append(", zerosFromBehind=").append(zerosFromBehind);
+            //sb.append(", lastOffset=").append(lastOffset);
+            //sb.append(", diffToLastOffset=").append(getDiffToLastOffset());
+            //sb.append(", cyclicBuffer=").append(cyclicBuffer);
+            sb.append(", pattern=").append(Utils.toHexString(pattern));
+            sb.append('}');
+            return sb.toString();
+        }
+        
+        
+        
+    }
 }
