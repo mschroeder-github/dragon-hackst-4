@@ -3,8 +3,11 @@ package net.markus.projects.dh4;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -19,7 +22,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import javax.imageio.ImageIO;
-import net.markus.projects.dh4.DQLZS.CompressResult;
 import net.markus.projects.dh4.DQLZS.DecompressResult;
 import net.markus.projects.dh4.data.DQFiles;
 import net.markus.projects.dh4.data.Found;
@@ -36,6 +38,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.crosswire.common.compress.LZSS;
 
 /**
  * Main entry point.
@@ -45,7 +48,7 @@ public class Main {
     public static void main(String[] args) throws Exception {
         //shiftjisToHex();
         
-        boolean writePatch = false;
+        boolean writePatch = true;
         DQFiles dqFiles = DQFiles.dq4();
         
         HBD1PS1D hbd = load(dqFiles.readHbdFile);
@@ -60,11 +63,17 @@ public class Main {
         //translationPreparation(hbd, dqFiles);
         //translationEmbedding(hbd, psexe, dqFiles);
         //translationEmbeddingV2(hbd, psexe, dqFiles);
+        translationEmbeddingV2onlyCompress(hbd, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //h60010108Blocks(hbd);
         //lzsDecompressionEvaluation(hbd);
-        lzsCompressionEvaluation(hbd);
+        //lzsCompressionEvaluation(hbd);
+        //compareWithRAM(
+        //        new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/2021-12-19-before-standing-up-memory-dump.bin"),
+        //        new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/dq4-psxrip/26046-6.bin"),
+        //        "0018E724"
+        //);
         //timExtraction(hbd);
         //veryFirstBlock(hbd);
         //fontImages(hbd);
@@ -519,9 +528,14 @@ public class Main {
         embedding.embed(dqFiles.translationFolderRead, hbd, psexe);
     }
     
-    private static void translationEmbeddingV2(HBD1PS1D hbd, PSEXE psexe, DQFiles dqFiles) throws IOException {
+    private static void translationEmbeddingV1_2(HBD1PS1D hbd, PSEXE psexe, DQFiles dqFiles) throws IOException {
         TranslationEmbedding embedding = new TranslationEmbedding();
-        embedding.embedV2(dqFiles.translationFolderRead, hbd, psexe);
+        embedding.embedV1_2(dqFiles.translationFolderRead, hbd, psexe);
+    }
+    
+    private static void translationEmbeddingV2onlyCompress(HBD1PS1D hbd, DQFiles dqFiles) throws IOException {
+        TranslationEmbedding embedding = new TranslationEmbedding();
+        embedding.embedV2onlyCompress(dqFiles.translationFolderRead, hbd);
     }
     
     //mass decompression: check if everything works
@@ -609,7 +623,9 @@ public class Main {
         boolean showHex = false;
         
         Set<String> pathWhitelist = new HashSet<>();
-        //pathWhitelist.add("25336/0");
+        //pathWhitelist.add("26046/6"); //cut scene script of first scene
+        
+        
         
         for(StarZerosSubBlock sb : compressedList) {
             
@@ -619,52 +635,67 @@ public class Main {
             
             if(debug) {
                 System.out.println();
-                System.out.println(sb.getPath() + " ======================================");
+                System.out.println("path=" + sb.getPath() + " ======================================");
                 System.out.println();
             }
             
             DecompressResult decompressResult = DQLZS.decompress(sb.data, sb.sizeUncompressed, false);
          
-            CompressResult compressResult = DQLZS.compress(decompressResult.data, false, decompressResult);
+            //my version
+            //CompressResult compressResult = DQLZS.compress(decompressResult.data, false, decompressResult);
+            
+            //external version
+            LZSS lzss = new LZSS(new ByteArrayInputStream(decompressResult.data));
+            ByteArrayOutputStream compressBaos = lzss.compress();
+            byte[] compressData = compressBaos.toByteArray();
+            
+            //System.out.println(Utils.toHexDump(compressData, 128));
+            //System.out.println(Utils.toHexDump(sb.data, 128));
             
             //-2 length diff
             //-1 is equal
-            int compressedCmp = Utils.compare(sb.data, compressResult.data);
+            int compressedCmp = Utils.compare(sb.data, compressData);
             
-            DecompressResult decompressFromMeResult = DQLZS.decompress(compressResult.data, sb.sizeUncompressed);
+            DecompressResult decompressFromMeResult = DQLZS.decompress(compressData, sb.sizeUncompressed);
             int decompressedCmp = Utils.compare(decompressFromMeResult.data, decompressResult.data);
             
-            System.out.println(
-                    sb.getPath() + 
-                    " cmp=" + compressedCmp + 
-                    ", equal=" + (compressedCmp == -1) + 
-                            
-                    ", sb.data.length=" + sb.data.length + 
-                    ", compressResult.data.length=" + compressResult.data.length +
-                            
-                    " dcmp=" + decompressedCmp + 
-                    ", dequal=" + (decompressedCmp == -1)
-            );
+            boolean dequal = decompressedCmp == -1;
             
-            if(/*cmp >= 0 &&*/ showHex) {
+            if(!dequal) {
+                System.out.println(
+                        sb.getPath() + 
+                        " cmp=" + compressedCmp + 
+                        ", equal=" + (compressedCmp == -1) + 
+
+                        ", sb.data.length=" + sb.data.length + 
+                        ", compressResult.data.length=" + compressData.length +
+
+                        " dcmp=" + decompressedCmp + 
+                        ", dequal=" + dequal
+                );
+            }
+            
+            /*
+            if(!dequal && showHex) {
                 String original = Utils.toHexDump(sb.data, 16, true, false, null);
-                String compressed = Utils.toHexDump(compressResult.data, 16, true, false, null);
+                String compressed = Utils.toHexDump(compressData, 16, true, false, null);
                 
                 System.out.println(Utils.splitScreen("my compression:\n" + compressed, 90, "original compression:\n" + original));
                 
                 int a = 0;
             }
+            */
             
             p.printRecord(
                     sb.getPath(),
                     sb.size,
                     sb.type,
-                    compressResult.exception != null,
-                    compressResult.exception != null ? compressResult.exception.getMessage() : "",
-                    compressResult.exception != null ? compressResult.exception.getClass().getSimpleName() : "",
-                    compressResult.getDuration(),
-                    compressResult.stopReason,
-                    compressResult.data.length,
+                    //compressResult.exception != null,
+                    //compressResult.exception != null ? compressResult.exception.getMessage() : "",
+                    //compressResult.exception != null ? compressResult.exception.getClass().getSimpleName() : "",
+                    //compressResult.getDuration(),
+                    //compressResult.stopReason,
+                    //compressResult.data.length,
                     compressedCmp,
                     compressedCmp == -1,
                     decompressedCmp,
@@ -674,6 +705,48 @@ public class Main {
             //break;
         }
         
+    }
+    
+    private static void compareWithRAM(File ramFile, File blockFile, String ramStartHex) throws IOException {
+        
+        int start = Utils.bytesToInt(Utils.hexStringToByteArray(ramStartHex));
+        
+        FileInputStream ram = new FileInputStream(ramFile);
+        FileInputStream block = new FileInputStream(blockFile);
+        
+        FileOutputStream blockInRam = new FileOutputStream(blockFile + ".inRAM.bin");
+        
+        ram.skip(start);
+        
+        int r = 0;
+        int b = 0;
+        
+        int i = 0;
+        
+        int incorrectCount = 0;
+        
+        while(r != -1 && b != -1) {
+            r = ram.read();
+            b = block.read();
+            
+            blockInRam.write(r);
+            
+            if(r != b) {
+                System.out.println(
+                        "0x" + Utils.toHexString(Utils.intToByteArray(i)).replace(" ", "") + 
+                        " at index " + i + "/" + blockFile.length() + " ram=" + r + " is not b=" + b
+                );
+                incorrectCount++;
+            }
+            
+            i++;
+        }
+        
+        System.out.println(incorrectCount + " incorrect / " + blockFile.length());
+        
+        blockInRam.close();
+        ram.close();
+        block.close();
     }
     
     private static void comparisonW7Q7() throws IOException {

@@ -77,6 +77,8 @@ public class DQLZS {
                         //literal
 
                         byte literal = compressed[offsetCompressed];
+                        
+                        //System.out.println("(decomp)literal lit=" + literal);
 
                         decompressed[offsetDecompressed] = compressed[offsetCompressed];
                         buffer[offsetBuffer] = compressed[offsetCompressed];
@@ -124,6 +126,9 @@ public class DQLZS {
                         int off = Utils.bitsToIntLE(offStr);
                         int storedOff = off;
                         off = (off + 18) % maxOff;
+                        
+                        
+                        //System.out.println("(decomp)reference off=" + off + ", len=" + len);
 
                         
                         String line = String.format("reference at len=%d off=%d storedOff=%d offsetComp=%d/%d offsetDecomp=%d/%d offsetBuff=%d offDiff=%d full=%s offStr=%s refBytesBits=%s | %s",
@@ -460,6 +465,10 @@ public class DQLZS {
             if (DEBUG) {
                 throw e;
             }
+            
+            if(ASSERT) {
+                System.exit(1);
+            }
         }
 
         return result;
@@ -655,23 +664,47 @@ public class DQLZS {
                         //was not these special zeros
                         if(!matchHistory.get(i).zerosFromBehind) {
                             
-                            byte[] seq = historyBufferSeq(i, data18bytes.length);
+                            CyclicBuffer cyclicBuffer = historyBufferSeq(i, data18bytes.length);
                             
-                            int cmp = Utils.compare(data18bytes, seq);
+                            int cmp = Utils.compare(data18bytes, cyclicBuffer.data);
                             if(cmp == -1) {
                                 //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
 
                                 //if it matches, this length/offset combination works
                                 BufferMatch match = new BufferMatch(true, matchHistory.get(i).offset, Arrays.copyOf(data18bytes, data18bytes.length));
+                                match.dstOffset = decompressedIndex;
+                                match.offset = matchHistory.get(i).dstOffset;
+                                match.cyclicBuffer = cyclicBuffer;
                                 matches.add(match);
                             }
                         }
                     }
                     
                     if(onlyZeros(data18bytes)) {
-                        BufferMatch match = new BufferMatch(true, buffer.length - data18bytes.length, Arrays.copyOf(data18bytes, data18bytes.length));
-                        match.zerosFromBehind = true;
-                        matches.add(match);
+                        
+                        BufferMatch prevMatch = matchHistory.get(matchHistory.size() - 1);
+                        if(!prevMatch.zerosFromBehind && prevMatch.hasCyclicBuffer() && prevMatch.cyclicBuffer.endsWithZero && prevMatch.cyclicBuffer.cycled) {
+                            
+                            byte[] copiedData = Arrays.copyOf(data18bytes, data18bytes.length);
+                            
+                            //from the end of buffer but cycled it seems
+                            BufferMatch match = new BufferMatch(true, prevMatch.dstOffset + prevMatch.length - 1, copiedData);
+                            match.dstOffset = decompressedIndex;
+                            match.cyclicBuffer = new CyclicBuffer();
+                            match.cyclicBuffer.data = copiedData;
+                            match.cyclicBuffer.cycled = true; //maybe
+                            match.cyclicBuffer.endsWithZero = true;
+                            match.zerosFromBehind = true; //they are handled like zeros from behind
+                            matches.add(match);
+                            
+                        } else {
+                        
+                            //zeros from behind
+                            BufferMatch match = new BufferMatch(true, buffer.length - data18bytes.length, Arrays.copyOf(data18bytes, data18bytes.length));
+                            match.zerosFromBehind = true;
+                            match.dstOffset = decompressedIndex;
+                            matches.add(match);
+                        }
                     }
                     
                     
@@ -723,13 +756,16 @@ public class DQLZS {
             match.pattern = new byte[] { data18bytes[0] };
             match.length = 1;
             match.offset = decompressedIndex;
+            match.dstOffset = decompressedIndex;
             //lastOffset = buffer.length - 18;
             println("no match " + match +"\n");
             matchHistory.add(match);
             return match;
         }
         
-        private byte[] historyBufferSeq(int historyIndex, int len) {
+        private CyclicBuffer historyBufferSeq(int historyIndex, int len) {
+            
+            CyclicBuffer cyclicBuffer = new CyclicBuffer();
             
             ByteArrayOutputStream seq = new ByteArrayOutputStream();
             
@@ -752,11 +788,16 @@ public class DQLZS {
                 //cycles
                 if(i == matchHistory.size() - 1) {
                     i = historyIndex - 1;
+                    cyclicBuffer.cycled = true;
                     //after that i++ so we start again at historyIndex
                 }
             }
             
-            return seq.toByteArray();
+            cyclicBuffer.data = seq.toByteArray();
+            
+            cyclicBuffer.endsWithZero = cyclicBuffer.data[cyclicBuffer.data.length - 1] == 0;
+            
+            return cyclicBuffer;
         }
         
         private int maxZeroSeq(byte[] data18bytes) {
@@ -863,29 +904,31 @@ public class DQLZS {
         public boolean cycled;
         public boolean sizeReached;
         //public boolean specialOneStep;
-
+        public boolean endsWithZero;
+        
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("CyclicBuffer{data.len=").append(data.length);
             sb.append(", cycled=").append(cycled);
-            sb.append(", sizeReached=").append(sizeReached);
+            //sb.append(", sizeReached=").append(sizeReached);
+            sb.append(", endsWithZero=").append(endsWithZero);
             sb.append('}');
             return sb.toString();
         }
-
         
     }
     
     private static class BufferMatch {
         public boolean match;
         public int offset;
+        public int dstOffset;
         public int length;
         public byte[] pattern;
         public int lastOffset;
         public CyclicBuffer cyclicBuffer;
         public boolean zerosFromBehind;
-
+        
         public BufferMatch() {
             match = false;
         }
@@ -912,6 +955,10 @@ public class DQLZS {
             return diff;
         }
         
+        public boolean hasCyclicBuffer() {
+            return cyclicBuffer != null;
+        }
+        
         //@Override
         //public String toString() {
         //    return "BufferMatch{" + "match=" + match + ", offset=" + offset + ", length=" + length + '}';
@@ -922,12 +969,15 @@ public class DQLZS {
             StringBuilder sb = new StringBuilder();
             sb.append("BufferMatch{match=").append(match);
             sb.append(", offset=").append(offset);
+            sb.append(", dstOffset=").append(dstOffset);
             sb.append(", length=").append(length);
             sb.append(", zerosFromBehind=").append(zerosFromBehind);
             //sb.append(", lastOffset=").append(lastOffset);
             //sb.append(", diffToLastOffset=").append(getDiffToLastOffset());
-            //sb.append(", cyclicBuffer=").append(cyclicBuffer);
             sb.append(", pattern=").append(Utils.toHexString(pattern));
+            if(cyclicBuffer != null) {
+                sb.append(", cyclicBuffer=").append(cyclicBuffer);
+            }
             sb.append('}');
             return sb.toString();
         }

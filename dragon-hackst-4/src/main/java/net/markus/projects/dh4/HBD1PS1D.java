@@ -344,7 +344,7 @@ public class HBD1PS1D {
                 offset += 2;
 
                 szb.compressed = szb.sizeUncompressed != szb.size && szb.flags1 != 0; //maybe better to check with sizes
-
+                
                 starZeros.starZerosBlocks.add(szb);
             }
 

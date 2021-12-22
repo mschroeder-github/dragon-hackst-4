@@ -109,7 +109,7 @@ public class StarZeros extends HBDBlock {
         for(StarZerosSubBlock subblock : starZerosBlocks) {
             
             baos.write(Utils.intToByteArrayLE(subblock.data.length));
-            baos.write(Utils.intToByteArrayLE(subblock.sizeUncompressed)); //TODO sizeUncompressed
+            baos.write(Utils.intToByteArrayLE(subblock.sizeUncompressed));
             baos.write(Utils.intToByteArrayLE(subblock.unknown));
             baos.write(Utils.shortToByteArrayLE(subblock.flags1));
             baos.write(Utils.shortToByteArrayLE(subblock.type));
@@ -132,6 +132,12 @@ public class StarZeros extends HBDBlock {
         int cmp = Utils.compare(baos.toByteArray(), this.full2048);
         if(cmp != -1) {
             System.out.println("StarZeros: " + blockIndex + " compare: " + cmp);
+            
+            System.out.println("their data:");
+            System.out.println(Utils.toHexDump(this.full2048, 256));
+            
+            System.out.println("my data:");
+            System.out.println(Utils.toHexDump(baos.toByteArray(), 256));
         }
         
         //if(full2048.length != baos.toByteArray().length) {

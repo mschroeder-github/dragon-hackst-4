@@ -1,6 +1,7 @@
 
 package net.markus.projects.dh4;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -16,18 +17,21 @@ import net.markus.projects.dh4.data.HuffmanChar;
 import net.markus.projects.dh4.data.HuffmanCode;
 import net.markus.projects.dh4.data.ParseNode;
 import net.markus.projects.dh4.data.StarZeros;
+import net.markus.projects.dh4.data.StarZerosSubBlock;
 import net.markus.projects.dh4.data.TextBlock;
 import net.markus.projects.dh4.util.Utils;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.FileUtils;
+import org.crosswire.common.compress.LZSS;
 
 /**
  * 
  */
 public class TranslationEmbedding {
 
+    //first proof-of-concept with dialog pointer switch idea
     public void embed(File translationFolder, HBD1PS1D hbd, PSEXE psexe) throws IOException {
         
         Map<String, List<TextBlock>> id2tb = hbd.getTextBlockIDMap();
@@ -224,7 +228,9 @@ public class TranslationEmbedding {
         
     }
     
-    public void embedV2(File translationFolder, HBD1PS1D hbd, PSEXE psexe) throws IOException {
+    //deprecated: unfinished idea to put additional data in the sector and do dialog pointer switch
+    @Deprecated
+    public void embedV1_2(File translationFolder, HBD1PS1D hbd, PSEXE psexe) throws IOException {
         
         List<OpCode> code = new ArrayList<>();
 
@@ -442,7 +448,99 @@ public class TranslationEmbedding {
         psexe.patch("8001D4CC", "8008EBA4", code);
     }
     
-    
+    //ca. from 2021-12-21: this idea uses the cut scene script we found and checks if compression will work in-game
+    public void embedV2onlyCompress(File translationFolder, HBD1PS1D hbd) {
+        
+        Map<String, List<TextBlock>> id2tb = hbd.getTextBlockIDMap();
+        System.out.println(id2tb.size() + " unique textblocks found");
+        
+        Set<String> hexIdWhitelist = new HashSet<>();
+        hexIdWhitelist.add("006C");
+        
+        for(File translationFile : translationFolder.listFiles()) {
+            if(!translationFile.getName().endsWith(".csv"))
+                continue;
+            
+            String name = translationFile.getName();
+            String hexId = name.substring(0, name.length() - ".csv".length());
+            
+            if(!hexIdWhitelist.isEmpty() && !hexIdWhitelist.contains(hexId)) {
+                continue;
+            }
+            
+            //we have to update these textblocks
+            List<TextBlock> textblocks = id2tb.get(hexId);
+            StarZerosSubBlock sb = textblocks.get(0).subBlock;
+            
+            StarZerosSubBlock cutSceneBlock = null;
+            for(StarZerosSubBlock child : sb.parent.starZerosBlocks) {
+                if(child.type == 39) {
+                    cutSceneBlock = child;
+                    break;
+                }
+            }
+            
+            if(cutSceneBlock == null) {
+                System.out.println("cut scene block not found");
+                continue;
+            }
+            
+            System.out.println(
+                    hexId + " with " + textblocks.size() + " textblocks in subblock " + sb.getPath() + 
+                    ", cut scene block " + cutSceneBlock.getPath() + " compressed: " + cutSceneBlock.compressed
+            );
+            
+            byte[] cutSceneDecompData = null;
+            if(cutSceneBlock.compressed) {
+                DQLZS.DecompressResult decompressResult = DQLZS.decompress(cutSceneBlock.data, cutSceneBlock.sizeUncompressed, false);
+                cutSceneDecompData = decompressResult.data;
+                
+                System.out.println("uncompressed cut scene block data len=" + cutSceneDecompData.length + " sizeUncompressed=" + cutSceneBlock.sizeUncompressed);
+            } else {
+                cutSceneDecompData = cutSceneBlock.data;
+            }
+            
+            
+            //==================================================
+            //here we would change text block and cut scene data
+            //==================================================
+            
+            
+            //if cut scene block was compressed we compress it again
+            //leads to an error as soon as the cut scene script is evaluated 
+            if(cutSceneBlock.compressed) {
+                LZSS lzss = new LZSS(new ByteArrayInputStream(cutSceneDecompData));
+                ByteArrayOutputStream compressBaos;
+                try {
+                    compressBaos = lzss.compress();
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+                byte[] compressData = compressBaos.toByteArray();
+                
+                //update data
+                cutSceneBlock.data = compressData;
+                cutSceneBlock.size = compressData.length;
+                //uncompressed size does not change
+            }
+            
+            
+            //another idea: do not compress it
+            //because of larger size leads to: 26046 sector change from 44 to 46
+            /*
+            if(cutSceneBlock.compressed) {
+                
+                cutSceneBlock.compressed = false;
+                cutSceneBlock.data = cutSceneDecompData;
+                cutSceneBlock.size = cutSceneDecompData.length;
+                cutSceneBlock.sizeUncompressed = cutSceneDecompData.length;
+                cutSceneBlock.flags1 = 0;
+            }
+            */
+            
+        }
+        
+    }
     
     
     //extra injected
