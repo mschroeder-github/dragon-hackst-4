@@ -22,10 +22,16 @@
 
 package org.crosswire.common.compress;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import net.markus.projects.dh4.DQLZS;
+import net.markus.projects.dh4.DQLZS.HistoryEntry;
+import net.markus.projects.dh4.util.Utils;
 
 //taken from
 //https://github.com/crosswire/jsword-migration/blob/master/jsword/src/main/java/org/crosswire/common/compress/LZSS.java
@@ -134,6 +140,117 @@ import java.util.Arrays;
  * @author DM Smith [dmsmith555 at yahoo dot com]
  */
 public class LZSS extends AbstractCompressor {
+    
+    
+    
+    /**
+     * This is the size of the ring buffer. It is set to 4K. It is important to
+     * note that a position within the ring buffer requires 12 bits.
+     */
+    private static final short RING_SIZE = 4096;
+
+    /**
+     * This is used to determine the next position in the ring buffer, from 0 to
+     * RING_SIZE - 1. The idiom s = (s + 1) & RING_WRAP; will ensure this. This
+     * only works if RING_SIZE is a power of 2. Note this is slightly faster
+     * than the equivalent: s = (s + 1) % RING_SIZE;
+     */
+    private static final short RING_WRAP = RING_SIZE - 1;
+
+    /**
+     * This is the maximum length of a character sequence that can be taken from
+     * the ring buffer. It is set to 18. Note that a length must be 3 before it
+     * is worthwhile to store a position/length pair, so the length can be
+     * encoded in only 4 bits. Or, put yet another way, it is not necessary to
+     * encode a length of 0-18, it is necessary to encode a length of 3-18,
+     * which requires 4 bits.
+     * <p>
+     * Note that the 12 bits used to store the position and the 4 bits used to
+     * store the length equal a total of 16 bits, or 2 bytes.
+     * </p>
+     */
+    private static final int MAX_STORE_LENGTH = 18;
+
+    /**
+     * It takes 2 bytes to store an offset and a length. If a character sequence
+     * only requires 1 or 2 characters to store uncompressed, then it is better
+     * to store it uncompressed than as an offset into the ring buffer.
+     */
+    private static final int THRESHOLD = 3;
+
+    /**
+     * Used to mark nodes as not used.
+     */
+    private static final short NOT_USED = RING_SIZE;
+
+    /**
+     * A text buffer. It contains "nodes" of uncompressed text that can be
+     * indexed by position. That is, a substring of the ring buffer can be
+     * indexed by a position and a length. When decoding, the compressed text
+     * may contain a position in the ring buffer and a count of the number of
+     * bytes from the ring buffer that are to be moved into the uncompressed
+     * buffer.
+     * 
+     * <p>
+     * This ring buffer is not maintained as part of the compressed text.
+     * Instead, it is reconstructed dynamically. That is, it starts out empty
+     * and gets built as the text is decompressed.
+     * </p>
+     * 
+     * <p>
+     * The ring buffer contain RING_SIZE bytes, with an additional
+     * MAX_STORE_LENGTH - 1 bytes to facilitate string comparison.
+     * </p>
+     */
+    private byte[] ringBuffer;
+
+    /**
+     * The position in the ring buffer. Used by insertNode.
+     */
+    private short matchPosition;
+
+    /**
+     * The number of characters in the ring buffer at matchPosition that match a
+     * given string. Used by insertNode.
+     */
+    private short matchLength;
+
+    /**
+     * leftSon, rightSon, and dad are the Japanese way of referring to a tree
+     * structure. The dad is the parent and it has a right and left son (child).
+     * 
+     * <p>
+     * For i = 0 to RING_SIZE-1, rightSon[i] and leftSon[i] will be the right
+     * and left children of node i.
+     * </p>
+     * 
+     * <p>
+     * For i = 0 to RING_SIZE-1, dad[i] is the parent of node i.
+     * </p>
+     * 
+     * <p>
+     * For i = 0 to 255, rightSon[RING_SIZE + i + 1] is the root of the tree for
+     * strings that begin with the character i. Note that this requires one byte
+     * characters.
+     * </p>
+     * 
+     * <p>
+     * These nodes store values of 0...(RING_SIZE-1). Memory requirements can be
+     * reduces by using 2-byte integers instead of full 4-byte integers (for
+     * 32-bit applications). Therefore, these are defined as "shorts."
+     * </p>
+     */
+    private short[] dad;
+    private short[] leftSon;
+    private short[] rightSon;
+
+    /**
+     * The output stream containing the result.
+     */
+    private ByteArrayOutputStream out;
+    
+    private boolean debug = false;
+    
     /**
      * Create an LZSS that is capable of transforming the input.
      * 
@@ -148,23 +265,25 @@ public class LZSS extends AbstractCompressor {
         rightSon = new short[RING_SIZE + 257];
     }
 
+    //Mandy: The "LZSS0" type uses parameters "12 4 2 2 0", which is the default besides that last 0
+    
     /*
      * (non-Javadoc)
      * 
      * @see org.crosswire.common.compress.Compressor#compress()
      */
-    public ByteArrayOutputStream compress() throws IOException {
+    public ByteArrayOutputStream compress(DQLZS.DecompressResult decompressResult) throws IOException {
         out = new ByteArrayOutputStream(BUF_SIZE);
 
         short i; // an iterator
         short r; // node number in the binary tree
         short s; // position in the ring buffer
         short len; // length of initial string
-        short lastMatchLength; // length of last match
+        short lastMatchLength = 0; // length of last match
         short codeBufPos; // position in the output buffer
         byte[] codeBuff = new byte[17]; // the output buffer
         byte mask; // bit mask for byte 0 of out input
-        byte c; // character read from string
+        byte c = 0; // character read from string
 
         // Start with a clean tree.
         initTree();
@@ -201,7 +320,7 @@ public class LZSS extends AbstractCompressor {
         // This is because those MAX_STORE_LENGTH bytes will be filled in
         // immediately
         // with bytes from the input stream.
-        Arrays.fill(ringBuffer, 0, r, (byte) ' ');
+        Arrays.fill(ringBuffer, 0, r, (byte) 0);//mschroeder change: zero filled, not ' '
 
         // Read MAX_STORE_LENGTH bytes into the last MAX_STORE_LENGTH bytes of
         // the ring buffer.
@@ -231,40 +350,98 @@ public class LZSS extends AbstractCompressor {
         // member variables matchLength and matchPosition are set.
         insertNode(r);
 
+        //mschroeder
+        int bitIndex = 0;
+        List<HistoryEntry> history = new ArrayList<>();
+        
+        int refDataWrongCount = 0;
+        
         // Now that we're preloaded, continue till done.
         do {
+            
+            println("i=" + i + ", r=" + r + ", s=" + s + ", len=" + len + ", lastMatchLength=" + lastMatchLength + 
+                    ", codeBufPos=" + codeBufPos + ", mask=" + mask + ", c=" + c + ", ringBuffer.length=" + ringBuffer.length
+            );
 
             // matchLength may be spuriously long near the end of text.
             if (matchLength > len) {
                 matchLength = len;
             }
+            
+            HistoryEntry entry;
 
             // Is it cheaper to store this as a single character? If so, make it
             // so.
             if (matchLength < THRESHOLD) {
+                //literal case
+                
                 // Send one character. Remember that codeBuff[0] is the
                 // set of flags for the next eight items.
                 matchLength = 1;
                 codeBuff[0] |= mask;
                 codeBuff[codeBufPos++] = ringBuffer[r];
                 
-                //System.out.println("literal lit=" + ringBuffer[r]);
+                //debug stuff
+                entry = new HistoryEntry();
+                entry.literal = true;
+                entry.length = 1;
+                entry.controlBitIndex = bitIndex;
+                entry.data = new byte[] { ringBuffer[r] };
+                history.add(entry);
                 
             } else {
+                //reference case
                 // Otherwise, we do indeed have a string that can be stored
                 // compressed to save space.
 
+                
                 // The next 16 bits need to contain the position (12 bits)
                 // and the length (4 bits).
                 codeBuff[codeBufPos++] = (byte) matchPosition;
                 codeBuff[codeBufPos++] = (byte) (((matchPosition >> 4) & 0xF0) | (matchLength - THRESHOLD));
                 
-                //System.out.println("reference off=" + matchPosition + ", len=" + matchLength);
+                
+                //sometimes this produces not the data we expect from the decompression
+                byte[] data = new byte[matchLength];
+                for(int k = 0; k < matchLength; k++) {
+                    data[k] = ringBuffer[(matchPosition + k) % (ringBuffer.length)];
+                }
+                
+                //debug stuff
+                int realOffset = (matchPosition + 18) % RING_SIZE;
+                entry = new HistoryEntry();
+                entry.literal = false;
+                entry.length = matchLength;
+                entry.offset = realOffset;
+                entry.controlBitIndex = bitIndex;
+                entry.data = data;
+                history.add(entry);
+            }
+            
+            if(decompressResult != null) {
+                int historyIndex = history.size() - 1;
+                int historyMax = decompressResult.history.size();
+                HistoryEntry groundTruth = decompressResult.history.get(historyIndex);
+                String splitScreen = Utils.splitScreen(entry.toString(), 100, groundTruth.toString());
+                println(historyIndex + "/" + historyMax + ": " + splitScreen);
+
+                String cmp = HistoryEntry.compare(entry, groundTruth);
+                if(!cmp.isEmpty()) {
+                    System.out.println(cmp);
+
+                    if(!cmp.startsWith("ref.data")) {
+                        System.exit(0);
+                    } else {
+                        refDataWrongCount++;
+                    }
+                }
             }
 
             // Shift the mask one bit to the left so that it will be ready
             // to store the new bit.
             mask <<= 1;
+            bitIndex++;
+            bitIndex = bitIndex % 8;
 
             // If the mask is now 0, then we know that we have a full set
             // of flags and items in the code buffer. These need to be
@@ -369,6 +546,10 @@ public class LZSS extends AbstractCompressor {
             out.write(codeBuff, 0, codeBufPos);
         }
 
+        if(refDataWrongCount > 0) {
+            System.out.println("refDataWrongCount=" + refDataWrongCount);
+        }
+        
         return out;
     }
 
@@ -398,7 +579,7 @@ public class LZSS extends AbstractCompressor {
         // filled.
         // r is a nodeNumber
         int r = RING_SIZE - MAX_STORE_LENGTH;
-        Arrays.fill(ringBuffer, 0, r, (byte) ' ');
+        Arrays.fill(ringBuffer, 0, r, (byte) 0); //mschroeder change: from ' ' to 0
 
         flags = 0;
         int flagCount = 0; // which flag we're on
@@ -643,109 +824,30 @@ public class LZSS extends AbstractCompressor {
         dad[node] = NOT_USED;
     }
 
-    /**
-     * This is the size of the ring buffer. It is set to 4K. It is important to
-     * note that a position within the ring buffer requires 12 bits.
-     */
-    private static final short RING_SIZE = 4096;
 
-    /**
-     * This is used to determine the next position in the ring buffer, from 0 to
-     * RING_SIZE - 1. The idiom s = (s + 1) & RING_WRAP; will ensure this. This
-     * only works if RING_SIZE is a power of 2. Note this is slightly faster
-     * than the equivalent: s = (s + 1) % RING_SIZE;
-     */
-    private static final short RING_WRAP = RING_SIZE - 1;
-
-    /**
-     * This is the maximum length of a character sequence that can be taken from
-     * the ring buffer. It is set to 18. Note that a length must be 3 before it
-     * is worthwhile to store a position/length pair, so the length can be
-     * encoded in only 4 bits. Or, put yet another way, it is not necessary to
-     * encode a length of 0-18, it is necessary to encode a length of 3-18,
-     * which requires 4 bits.
-     * <p>
-     * Note that the 12 bits used to store the position and the 4 bits used to
-     * store the length equal a total of 16 bits, or 2 bytes.
-     * </p>
-     */
-    private static final int MAX_STORE_LENGTH = 18;
-
-    /**
-     * It takes 2 bytes to store an offset and a length. If a character sequence
-     * only requires 1 or 2 characters to store uncompressed, then it is better
-     * to store it uncompressed than as an offset into the ring buffer.
-     */
-    private static final int THRESHOLD = 3;
-
-    /**
-     * Used to mark nodes as not used.
-     */
-    private static final short NOT_USED = RING_SIZE;
-
-    /**
-     * A text buffer. It contains "nodes" of uncompressed text that can be
-     * indexed by position. That is, a substring of the ring buffer can be
-     * indexed by a position and a length. When decoding, the compressed text
-     * may contain a position in the ring buffer and a count of the number of
-     * bytes from the ring buffer that are to be moved into the uncompressed
-     * buffer.
-     * 
-     * <p>
-     * This ring buffer is not maintained as part of the compressed text.
-     * Instead, it is reconstructed dynamically. That is, it starts out empty
-     * and gets built as the text is decompressed.
-     * </p>
-     * 
-     * <p>
-     * The ring buffer contain RING_SIZE bytes, with an additional
-     * MAX_STORE_LENGTH - 1 bytes to facilitate string comparison.
-     * </p>
-     */
-    private byte[] ringBuffer;
-
-    /**
-     * The position in the ring buffer. Used by insertNode.
-     */
-    private short matchPosition;
-
-    /**
-     * The number of characters in the ring buffer at matchPosition that match a
-     * given string. Used by insertNode.
-     */
-    private short matchLength;
-
-    /**
-     * leftSon, rightSon, and dad are the Japanese way of referring to a tree
-     * structure. The dad is the parent and it has a right and left son (child).
-     * 
-     * <p>
-     * For i = 0 to RING_SIZE-1, rightSon[i] and leftSon[i] will be the right
-     * and left children of node i.
-     * </p>
-     * 
-     * <p>
-     * For i = 0 to RING_SIZE-1, dad[i] is the parent of node i.
-     * </p>
-     * 
-     * <p>
-     * For i = 0 to 255, rightSon[RING_SIZE + i + 1] is the root of the tree for
-     * strings that begin with the character i. Note that this requires one byte
-     * characters.
-     * </p>
-     * 
-     * <p>
-     * These nodes store values of 0...(RING_SIZE-1). Memory requirements can be
-     * reduces by using 2-byte integers instead of full 4-byte integers (for
-     * 32-bit applications). Therefore, these are defined as "shorts."
-     * </p>
-     */
-    private short[] dad;
-    private short[] leftSon;
-    private short[] rightSon;
-
-    /**
-     * The output stream containing the result.
-     */
-    private ByteArrayOutputStream out;
+    @Override
+    public ByteArrayOutputStream compress() throws IOException {
+        return compress(null);
+    }
+    
+    private void println(String line) {
+        if(debug) {
+            System.out.println(line);
+        }
+    }
+    
+    
+    //mschroeder public static method
+    public static byte[] compress(byte[] decompressed, int compressedSize) {
+        LZSS lzss = new LZSS(new ByteArrayInputStream(decompressed));
+        ByteArrayOutputStream compressBaos;
+        try {
+            compressBaos = lzss.compress();
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+        byte[] compressData = compressBaos.toByteArray();
+        compressData = Arrays.copyOf(compressData, compressedSize);
+        return compressData;
+    }
 }

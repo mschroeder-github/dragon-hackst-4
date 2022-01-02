@@ -3,6 +3,8 @@ package net.markus.projects.dh4.util;
 //import com.google.common.base.Objects;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -362,6 +364,18 @@ public class Utils {
         }
 
         return pos;
+    }
+    
+    public static byte[] replace(byte[] pattern, int position, byte[] data) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            baos.write(data, 0, position);
+            baos.write(pattern);
+            baos.write(data, position + pattern.length, data.length - (position + pattern.length));
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+        return baos.toByteArray();
     }
 
     public static List<Integer> find(List<byte[]> byteArrayList, int skip, byte[] data) {

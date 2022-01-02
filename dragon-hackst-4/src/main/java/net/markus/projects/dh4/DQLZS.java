@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import net.markus.projects.dh4.util.Utils;
 
 /**
@@ -80,6 +81,16 @@ public class DQLZS {
                         
                         //System.out.println("(decomp)literal lit=" + literal);
 
+                        HistoryEntry entry = new HistoryEntry();
+                        entry.literal = true;
+                        entry.controlBitIndex = 7-i;
+                        entry.length = 1;
+                        entry.data = new byte[] { literal };
+                        entry.offsetCompressed = offsetCompressed;
+                        entry.offsetDecompressed = offsetDecompressed;
+                        result.history.add(entry);
+                        
+                        
                         decompressed[offsetDecompressed] = compressed[offsetCompressed];
                         buffer[offsetBuffer] = compressed[offsetCompressed];
 
@@ -127,6 +138,21 @@ public class DQLZS {
                         int storedOff = off;
                         off = (off + 18) % maxOff;
                         
+                        
+                        byte[] data = new byte[len];
+                        for (int j = 0; j < len; j++) {
+                            data[j] = buffer[(off + j) % maxOff];
+                        }
+                        
+                        HistoryEntry entry = new HistoryEntry();
+                        entry.literal = false;
+                        entry.controlBitIndex = 7-i;
+                        entry.offset = off;
+                        entry.length = len;
+                        entry.data = data;
+                        entry.offsetCompressed = offsetCompressed;
+                        entry.offsetDecompressed = offsetDecompressed;
+                        result.history.add(entry);
                         
                         //System.out.println("(decomp)reference off=" + off + ", len=" + len);
 
@@ -221,6 +247,75 @@ public class DQLZS {
         return result;
     }
 
+    public static class HistoryEntry {
+        
+        public boolean literal;
+        
+        public int controlBitIndex;
+        
+        public int offset;
+        public int length;
+        
+        public byte[] data;
+        
+        public int offsetCompressed;
+        public int offsetDecompressed;
+        
+        public boolean isLiteral() {
+            return literal;
+        }
+        
+        public boolean isRef() {
+            return !literal;
+        }
+        
+        public String getType() {
+            return literal ? "literal" : "reference";
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append((controlBitIndex + 1) + "/8");
+            sb.append(" " + getType());
+            sb.append(" offset=" + offset);
+            sb.append(" length=" + length);
+            sb.append(" data=" + Utils.toHexString(data));
+            return sb.toString();
+        }
+        
+        public static String compare(HistoryEntry a, HistoryEntry b) {
+            
+            if(a.literal != b.literal) {
+                return "mode: " + a.getType() + " != " + b.getType();
+            }
+            
+            if(a.literal && b.literal) {
+                
+                if(a.data[0] != b.data[0]) {
+                    return "lit.data: 0x" + Utils.bytesToHex(a.data) + " != 0x" + Utils.bytesToHex(b.data);
+                }
+                
+            } else {
+                
+                if(a.length != b.length) {
+                    return "length: " + a.length + " != " + b.length;
+                }
+                
+                if(a.offset != b.offset) {
+                    return "offset: " + a.offset + " != " + b.offset;
+                }
+                
+                if(Utils.compare(a.data, b.data) != -1) {
+                    return "ref.data: 0x" + Utils.bytesToHex(a.data) + " != 0x" + Utils.bytesToHex(b.data);
+                }
+                
+            }
+            
+            return "";
+        }
+    }
+    
     public static class DecompressResult {
 
         public byte[] data;
@@ -238,6 +333,8 @@ public class DQLZS {
         public byte[] compressed;
         
         public List<String> logging = new ArrayList<>();
+        
+        public List<HistoryEntry> history = new ArrayList<>();
 
         public void setBeginEnd(long begin, long end) {
             this.begin = begin;
@@ -280,6 +377,8 @@ public class DQLZS {
             
             //int bufferIndex = 0;
             //int bufferSize = 0;
+            
+            int entryIndex = 0;
 
             while (decompressedIndex < decompressed.length) {
 
@@ -307,7 +406,7 @@ public class DQLZS {
                     //System.out.println("\ndecompressed");
                     //System.out.println(Utils.toHexDump(Arrays.copyOfRange(decompressed, 0, bufferObj.size), 50));
                     
-                    BufferMatch bufferMatchObj = bufferObj.matchV2(decompressedMatchable, decompressedIndex);
+                    BufferMatch bufferMatchObj = bufferObj.matchV2(decompressedMatchable, decompressedIndex, decompResult.history.size());
 
                     //-------------------
                     
@@ -333,16 +432,34 @@ public class DQLZS {
                             }
                             logSB.append("write literal at offset=" + (decompressedIndex-1) + " | " + (litValue & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{litValue}) + " | 0x" + Utils.bytesToHex(new byte[]{litValue}) + "\n");
                             
+                            
+                            HistoryEntry entry = new HistoryEntry();
+                            entry.literal = true;
+                            entry.length = 1;
+                            entry.data = new byte[] { litValue };
+                            entry.offsetDecompressed = decompressedIndex;
+                            entry.controlBitIndex = controlByteIndex;
+                            result.history.add(entry);
+                            
                         } else {
                             controlByteBits += "0";
                             
                             int len = bufferMatchObj.length;
                             int off = bufferMatchObj.offset;
                             
+                            HistoryEntry entry = new HistoryEntry();
+                            entry.literal = false;
+                            entry.length = len;
+                            entry.offset = off;
+                            entry.data = bufferMatchObj.pattern;
+                            entry.offsetDecompressed = decompressedIndex;
+                            entry.controlBitIndex = controlByteIndex;
+                            result.history.add(entry);
+                            
                             //the 00 00 0b case
-                            if(len == 3 && off == 4094) {
-                                int a = 0;
-                            }
+                            //if(len == 3 && off == 4094) {
+                            //    int a = 0;
+                            //}
                             
                             //skip the bytes we have compressed with a ref
                             decompressedIndex += len;
@@ -389,14 +506,17 @@ public class DQLZS {
                                 System.out.println(line);
                             }
                             logSB.append(line + "\n");
+                            //byte[] data = new byte[len];
                             for (int i = 0; i < len; i++) {
                                 int index = (off + i);
                                 byte lit = bufferObj.buffer[index % bufferObj.buffer.length];
+                                //data[i] = lit;
                                 if (DEBUG) {
                                     System.out.println("\tbuffer referred [off="+off+", index=" + index + ", buffer.size="+bufferObj.size+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}));
                                 }
                                 logSB.append("\tbuffer referred [off="+off+", index=" + index + ", buffer.size="+bufferObj.size+"] " + (lit & 0xff) + " | " + Utils.toHexStringASCII(new byte[]{lit}) + " | 0x" + Utils.bytesToHex(new byte[]{lit}) + "\n");
                             }
+                            //entry.data = data;
 
                         }//ref else
 
@@ -411,7 +531,24 @@ public class DQLZS {
                         //break from  for(int controlByteIndex
                         break;
                     }
-                }
+                    
+                    if(ASSERT) {
+                    
+                        HistoryEntry decomp = decompResult.history.get(entryIndex);
+                        HistoryEntry   comp = result.history.get(entryIndex);
+
+                        String compareResult = HistoryEntry.compare(comp, decomp);
+                        
+                        if(!compareResult.isEmpty()) {
+                            System.out.println(compareResult);
+                            System.out.println(Utils.splitScreen(comp.toString(), 75, decomp.toString()));
+                            System.exit(0);
+                        }
+                    }
+                    
+                    entryIndex++;
+                    
+                }//for control byte
 
                 controlByteBits = Utils.reverse(controlByteBits);
 
@@ -431,7 +568,15 @@ public class DQLZS {
                 
                 result.logging.add(logSB.toString());
                 
+                /*
                 if(ASSERT) {
+                    
+                    HistoryEntry decomp = decompResult.history.get(entryIndex);
+                    HistoryEntry comp = result.history.get(entryIndex);
+                    
+                    int a = 0;
+                    
+                    
                     byte[] currentOutput = output.toByteArray();
                     for(int i = 0; i < currentOutput.length; i++) {
                         if(decompResult.compressed[i] != currentOutput[i]) {
@@ -449,7 +594,11 @@ public class DQLZS {
                             System.exit(0);
                         }
                     }
+                    
                 }
+                */
+                
+                
                 
             }//while
             
@@ -487,6 +636,8 @@ public class DQLZS {
         public String stopReason = "";
         
         public List<String> logging = new ArrayList<>();
+        
+        public List<HistoryEntry> history = new ArrayList<>();
 
         public void setBeginEnd(long begin, long end) {
             this.begin = begin;
@@ -524,6 +675,7 @@ public class DQLZS {
             size = 0;
         }
         
+        @Deprecated
         public BufferMatch match(byte[] data18bytes, int decompressedIndex) {
             
             println("===============================================");
@@ -639,14 +791,16 @@ public class DQLZS {
             return match;
         }
 
-        public BufferMatch matchV2(byte[] data18bytes, int decompressedIndex) {
+        public BufferMatch matchV2(byte[] data18bytes, int decompressedIndex, int max) {
             
             println("===============================================");
             println("match method begin, decompressedIndex=" + decompressedIndex + ", buffer.size=" + size + ", data18bytes=" + Utils.toHexString(data18bytes));
             println("history: "+ matchHistory.size());
             for(int i = 0; i < matchHistory.size(); i++) {
-                println("\t[" + i + "] " + matchHistory.get(i));
+                println("\t[" + i + "/" + max + "] " + matchHistory.get(i));
             }
+            int bufferSize = matchHistory.stream().mapToInt(bm -> bm.pattern.length).sum();
+            println("bufferSize=" + bufferSize + ", decompressedIndex=" + decompressedIndex);
             //println(this.toString());
             
             int a = 0;
@@ -659,31 +813,12 @@ public class DQLZS {
                 //checking makes only sense if buffer is filled
                 if(size > 0) {
 
-                    for(int i = matchHistory.size() - 1; i >= 0; i--) {
-                        
-                        //was not these special zeros
-                        if(!matchHistory.get(i).zerosFromBehind) {
-                            
-                            CyclicBuffer cyclicBuffer = historyBufferSeq(i, data18bytes.length);
-                            
-                            int cmp = Utils.compare(data18bytes, cyclicBuffer.data);
-                            if(cmp == -1) {
-                                //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
-
-                                //if it matches, this length/offset combination works
-                                BufferMatch match = new BufferMatch(true, matchHistory.get(i).offset, Arrays.copyOf(data18bytes, data18bytes.length));
-                                match.dstOffset = decompressedIndex;
-                                match.offset = matchHistory.get(i).dstOffset;
-                                match.cyclicBuffer = cyclicBuffer;
-                                matches.add(match);
-                            }
-                        }
-                    }
+                    findMatchesV2(data18bytes, decompressedIndex, matches);
                     
                     if(onlyZeros(data18bytes)) {
                         
                         BufferMatch prevMatch = matchHistory.get(matchHistory.size() - 1);
-                        if(!prevMatch.zerosFromBehind && prevMatch.hasCyclicBuffer() && prevMatch.cyclicBuffer.endsWithZero && prevMatch.cyclicBuffer.cycled) {
+                        if(!prevMatch.zerosFromBehind && prevMatch.hasCyclicBuffer() && prevMatch.cyclicBuffer.endsWithZero /*&& prevMatch.cyclicBuffer.cycled*/) {
                             
                             byte[] copiedData = Arrays.copyOf(data18bytes, data18bytes.length);
                             
@@ -716,6 +851,9 @@ public class DQLZS {
                     
                     BufferMatch selected = null;
                     
+                    //default: take the first one
+                    selected = matches.get(0);
+                    
                     /*
                     println("history: "+ matchHistory.size());
                     for(int i = 0; i < matchHistory.size(); i++) {
@@ -725,6 +863,17 @@ public class DQLZS {
                     println("matches: "+ matches.size());
                     matches.forEach(m -> println("\t" + m.toString()));
                     
+                    if(matches.size() > 1) {
+                        
+                        //prefer the one that was not a reference again
+                        Optional<BufferMatch> opt = matches.stream().filter(m -> m.hasCyclicBuffer()).filter(m -> !m.cyclicBuffer.wasRef).findFirst();
+                        
+                        if(opt.isPresent()) {
+                            selected = opt.get();
+                        }
+                    }
+                    
+                    
                     //32 is the max
                     //we found something at 7
                     
@@ -732,8 +881,7 @@ public class DQLZS {
                     //20 = 32 - 12 
                     //reference: len=16 off=7 | reference at len=12 off=20 
                     
-                    //default: take the first one
-                    selected = matches.get(0);
+                    
                     
                     //if(onlyZeros(selected.pattern)) {
                     //    fillArray(selected.pattern);
@@ -761,6 +909,119 @@ public class DQLZS {
             println("no match " + match +"\n");
             matchHistory.add(match);
             return match;
+        }
+        
+        public void findMatchesV1(byte[] data18bytes, int decompressedIndex, List<BufferMatch> matches) {
+            for(int i = matchHistory.size() - 1; i >= 0; i--) {
+                        
+                //was not these special zeros
+                if(!matchHistory.get(i).zerosFromBehind) {
+
+                    CyclicBuffer cyclicBuffer = historyBufferSeq(i, data18bytes.length);
+
+                    int cmp = Utils.compare(data18bytes, cyclicBuffer.data);
+                    if(cmp == -1) {
+                        //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
+
+                        //if it matches, this length/offset combination works
+                        BufferMatch match = new BufferMatch(true, matchHistory.get(i).offset, Arrays.copyOf(data18bytes, data18bytes.length));
+                        match.dstOffset = decompressedIndex;
+                        match.offset = matchHistory.get(i).dstOffset;
+                        match.cyclicBuffer = cyclicBuffer;
+                        matches.add(match);
+                    }
+                }
+            }
+        }
+        
+        public void findMatchesV2(byte[] data18bytes, int decompressedIndex, List<BufferMatch> matches) {
+            int len = data18bytes.length;
+            boolean onlyZeros = onlyZeros(data18bytes);
+            
+            List<int[]> startPosList = new ArrayList<>();
+            for(int i = matchHistory.size() - 1; i >= 0; i--) {
+                byte[] pattern = matchHistory.get(i).pattern;
+                for(int k = pattern.length - 1; k >= 0; k--) {
+                    startPosList.add(new int[] { i, k });
+                }
+            }
+            
+            for(int[] startPos : startPosList) {
+                
+                CyclicBuffer cyclicBuffer = new CyclicBuffer();
+                ByteArrayOutputStream seq = new ByteArrayOutputStream();
+                
+                boolean hasLiteral = false;
+                
+                for(int i = startPos[0]; i < matchHistory.size(); i++) {
+                    
+                    boolean start = i == startPos[0];
+                    
+                    BufferMatch curMatch = matchHistory.get(i);
+                    
+                    if(curMatch.length == 1) {
+                        hasLiteral |= true;
+                    }
+                    
+                    byte[] pattern = curMatch.pattern;
+                    
+                    //if(start && curMatch.zerosFromBehind && startPos[1] == 0) {
+                        //do not start here
+                    //    continue;
+                    //}
+                    
+                    for(int j = start ? startPos[1] : 0; j < pattern.length; j++) {
+                        
+                        byte b = pattern[j];
+                        seq.write(b);
+                        
+                        if(seq.size() >= len) {
+                            break;
+                        }
+                    }
+                    
+                    if(seq.size() >= len) {
+                        break;
+                    }
+                }
+                
+                //maybe fill
+                while(seq.size() < data18bytes.length) {
+                    seq.write(0);
+                }
+
+                cyclicBuffer.data = seq.toByteArray();
+                cyclicBuffer.endsWithZero = cyclicBuffer.data[cyclicBuffer.data.length - 1] == 0;
+                cyclicBuffer.wasRef = matchHistory.get(startPos[0]).length > 1;
+
+                
+                int cmp = Utils.compare(data18bytes, cyclicBuffer.data);
+                if(cmp == -1) {
+                    //println("checking data got a match (len=" + String.format("%02d", data18bytes.length) + ") " + Utils.toHexString(data18bytes));
+
+                    if(onlyZeros) {
+                        int a = 0;
+                        
+                        if(hasLiteral) {
+                            //ok
+                            int b = 0;
+                            
+                        } else {
+                            //no
+                            continue;
+                        }
+                    }
+                    
+                    //if it matches, this length/offset combination works
+                    BufferMatch match = new BufferMatch(true, matchHistory.get(startPos[0]).offset + startPos[1], Arrays.copyOf(data18bytes, data18bytes.length));
+                    match.dstOffset = decompressedIndex;
+                    match.offset = matchHistory.get(startPos[0]).dstOffset;
+                    match.cyclicBuffer = cyclicBuffer;
+                    matches.add(match);
+                }
+                
+                
+            }//for start pos
         }
         
         private CyclicBuffer historyBufferSeq(int historyIndex, int len) {
@@ -796,6 +1057,8 @@ public class DQLZS {
             cyclicBuffer.data = seq.toByteArray();
             
             cyclicBuffer.endsWithZero = cyclicBuffer.data[cyclicBuffer.data.length - 1] == 0;
+            
+            cyclicBuffer.wasRef = matchHistory.get(historyIndex).length > 1;
             
             return cyclicBuffer;
         }
@@ -905,6 +1168,7 @@ public class DQLZS {
         public boolean sizeReached;
         //public boolean specialOneStep;
         public boolean endsWithZero;
+        public boolean wasRef;
         
         @Override
         public String toString() {
@@ -913,6 +1177,7 @@ public class DQLZS {
             sb.append(", cycled=").append(cycled);
             //sb.append(", sizeReached=").append(sizeReached);
             sb.append(", endsWithZero=").append(endsWithZero);
+            sb.append(", wasRef=").append(wasRef);
             sb.append('}');
             return sb.toString();
         }

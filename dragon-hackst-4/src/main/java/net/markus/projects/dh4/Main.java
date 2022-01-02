@@ -3,8 +3,6 @@ package net.markus.projects.dh4;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -63,7 +61,8 @@ public class Main {
         //translationPreparation(hbd, dqFiles);
         //translationEmbedding(hbd, psexe, dqFiles);
         //translationEmbeddingV2(hbd, psexe, dqFiles);
-        translationEmbeddingV2onlyCompress(hbd, dqFiles);
+        //translationEmbeddingV2onlyCompress(hbd, dqFiles);
+        translationEmbeddingV2(hbd, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //h60010108Blocks(hbd);
@@ -538,6 +537,11 @@ public class Main {
         embedding.embedV2onlyCompress(dqFiles.translationFolderRead, hbd);
     }
     
+    private static void translationEmbeddingV2(HBD1PS1D hbd, DQFiles dqFiles) throws IOException {
+        TranslationEmbedding embedding = new TranslationEmbedding();
+        embedding.embedV2(dqFiles.translationFolderRead, hbd);
+    }
+    
     //mass decompression: check if everything works
     private static void lzsDecompressionEvaluation(HBD1PS1D hbd) throws IOException {
         
@@ -619,6 +623,16 @@ public class Main {
         
         CSVPrinter p = CSVFormat.DEFAULT.print(new File(lzsEvaluationFolder, "compression.csv"), StandardCharsets.UTF_8);
         
+        p.printRecord(
+                "getPath",
+                "size",
+                "type",
+                "compressedCmp",
+                "compressedCmp == -1",
+                "decompressedCmp",
+                "decompressedCmp == -1"
+        );
+        
         boolean debug = false;
         boolean showHex = false;
         
@@ -641,26 +655,71 @@ public class Main {
             
             DecompressResult decompressResult = DQLZS.decompress(sb.data, sb.sizeUncompressed, false);
          
+            assert decompressResult.data.length == sb.sizeUncompressed;
+            
+            //external version of decompression
+            /*
+            LZSS lzssDecomp = new LZSS(new ByteArrayInputStream(sb.data));
+            ByteArrayOutputStream decompressBaos = lzssDecomp.uncompress(sb.sizeUncompressed);
+            byte[] decompressData = decompressBaos.toByteArray();
+            decompressData = Arrays.copyOf(decompressData, sb.sizeUncompressed);
+            
+            //our decompression comes to the same data
+            int decompCmp = Utils.compare(decompressResult.data, decompressData);
+            */
+            
             //my version
             //CompressResult compressResult = DQLZS.compress(decompressResult.data, false, decompressResult);
+            //byte[] compressData = compressResult.data;
+            
             
             //external version
-            LZSS lzss = new LZSS(new ByteArrayInputStream(decompressResult.data));
-            ByteArrayOutputStream compressBaos = lzss.compress();
-            byte[] compressData = compressBaos.toByteArray();
+            //LZSS lzss = new LZSS(new ByteArrayInputStream(decompressResult.data));
+            //ByteArrayOutputStream compressBaos = lzss.compress(decompressResult);
+            //byte[] compressData = compressBaos.toByteArray();
+            
+            byte[] compressData = LZSS.compress(decompressResult.data, sb.data.length);
+            
+            
+            //apache compress version
+            /*
+            LZ77Compressor.Callback callback = new LZ77Compressor.Callback() {
+                int index = 0;
+                @Override
+                public void accept(LZ77Compressor.Block block) throws IOException {
+                    System.out.println("[LZ77] " + block);
+                    if(index < decompressResult.history.size()) {
+                        System.out.println(decompressResult.history.get(index));
+                    }
+                    System.out.println();
+                    index++;
+                }
+            };
+            Parameters parameters = Parameters
+                    .builder(4096)
+                    .withMaxBackReferenceLength(18)
+                    .withMaxLiteralLength(1)
+                    .withMinBackReferenceLength(3)
+                    .build();
+            LZ77Compressor lz77 = new LZ77Compressor(parameters, callback);
+            //lz77.prefill(new byte[4096]);
+            lz77.compress(decompressResult.data);
+            */
             
             //System.out.println(Utils.toHexDump(compressData, 128));
             //System.out.println(Utils.toHexDump(sb.data, 128));
             
             //-2 length diff
             //-1 is equal
+            //byte[] lengthChangedCompressData = Arrays.copyOf(compressData, sb.data.length);
             int compressedCmp = Utils.compare(sb.data, compressData);
             
             DecompressResult decompressFromMeResult = DQLZS.decompress(compressData, sb.sizeUncompressed);
             int decompressedCmp = Utils.compare(decompressFromMeResult.data, decompressResult.data);
             
-            boolean dequal = decompressedCmp == -1;
+            //boolean dequal = decompressedCmp == -1;
             
+            /*
             if(!dequal) {
                 System.out.println(
                         sb.getPath() + 
@@ -674,6 +733,7 @@ public class Main {
                         ", dequal=" + dequal
                 );
             }
+            */
             
             /*
             if(!dequal && showHex) {
@@ -690,12 +750,6 @@ public class Main {
                     sb.getPath(),
                     sb.size,
                     sb.type,
-                    //compressResult.exception != null,
-                    //compressResult.exception != null ? compressResult.exception.getMessage() : "",
-                    //compressResult.exception != null ? compressResult.exception.getClass().getSimpleName() : "",
-                    //compressResult.getDuration(),
-                    //compressResult.stopReason,
-                    //compressResult.data.length,
                     compressedCmp,
                     compressedCmp == -1,
                     decompressedCmp,
@@ -705,6 +759,7 @@ public class Main {
             //break;
         }
         
+        p.close();
     }
     
     private static void compareWithRAM(File ramFile, File blockFile, String ramStartHex) throws IOException {

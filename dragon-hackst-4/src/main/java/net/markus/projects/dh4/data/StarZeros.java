@@ -133,11 +133,11 @@ public class StarZeros extends HBDBlock {
         if(cmp != -1) {
             System.out.println("StarZeros: " + blockIndex + " compare: " + cmp);
             
-            System.out.println("their data:");
-            System.out.println(Utils.toHexDump(this.full2048, 256));
+            //System.out.println("their data:");
+            //System.out.println(Utils.toHexDump(this.full2048, 256));
             
-            System.out.println("my data:");
-            System.out.println(Utils.toHexDump(baos.toByteArray(), 256));
+            //System.out.println("my data:");
+            //System.out.println(Utils.toHexDump(baos.toByteArray(), 256));
         }
         
         //if(full2048.length != baos.toByteArray().length) {

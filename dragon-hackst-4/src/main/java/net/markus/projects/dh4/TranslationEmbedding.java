@@ -1,9 +1,9 @@
 
 package net.markus.projects.dh4;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -502,28 +502,22 @@ public class TranslationEmbedding {
             
             
             //==================================================
-            //here we would change text block and cut scene data
+            // here we would change text block and cut scene data
             //==================================================
             
             
             //if cut scene block was compressed we compress it again
             //leads to an error as soon as the cut scene script is evaluated 
             if(cutSceneBlock.compressed) {
-                LZSS lzss = new LZSS(new ByteArrayInputStream(cutSceneDecompData));
-                ByteArrayOutputStream compressBaos;
-                try {
-                    compressBaos = lzss.compress();
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-                byte[] compressData = compressBaos.toByteArray();
+                byte[] compressData = LZSS.compress(cutSceneDecompData, cutSceneBlock.data.length);
+                
+                System.out.println("compressed cut scene block data len=" + compressData.length);
                 
                 //update data
                 cutSceneBlock.data = compressData;
                 cutSceneBlock.size = compressData.length;
                 //uncompressed size does not change
             }
-            
             
             //another idea: do not compress it
             //because of larger size leads to: 26046 sector change from 44 to 46
@@ -542,6 +536,117 @@ public class TranslationEmbedding {
         
     }
     
+    public void embedV2(File translationFolder, HBD1PS1D hbd) {
+        
+        Map<String, List<TextBlock>> id2tb = hbd.getTextBlockIDMap();
+        System.out.println(id2tb.size() + " unique textblocks found");
+        
+        Set<String> hexIdWhitelist = new HashSet<>();
+        hexIdWhitelist.add("006C");
+        
+        for(File translationFile : translationFolder.listFiles()) {
+            if(!translationFile.getName().endsWith(".csv"))
+                continue;
+            
+            String name = translationFile.getName();
+            String hexId = name.substring(0, name.length() - ".csv".length());
+            
+            if(!hexIdWhitelist.isEmpty() && !hexIdWhitelist.contains(hexId)) {
+                continue;
+            }
+            
+            //we have to update these textblocks
+            List<TextBlock> textblocks = id2tb.get(hexId);
+            StarZerosSubBlock sb = textblocks.get(0).subBlock;
+            
+            StarZerosSubBlock cutSceneBlock = null;
+            for(StarZerosSubBlock child : sb.parent.starZerosBlocks) {
+                if(child.type == 39) {
+                    cutSceneBlock = child;
+                    break;
+                }
+            }
+            
+            if(cutSceneBlock == null) {
+                System.out.println("cut scene block not found");
+                continue;
+            }
+            
+            System.out.println(
+                    hexId + " with " + textblocks.size() + " textblocks in subblock " + sb.getPath() + 
+                    ", cut scene block " + cutSceneBlock.getPath() + " compressed: " + cutSceneBlock.compressed
+            );
+            
+            byte[] cutSceneDecompData = null;
+            if(cutSceneBlock.compressed) {
+                DQLZS.DecompressResult decompressResult = DQLZS.decompress(cutSceneBlock.data, cutSceneBlock.sizeUncompressed, false);
+                cutSceneDecompData = decompressResult.data;
+                
+                System.out.println("uncompressed cut scene block data len=" + cutSceneDecompData.length + " sizeUncompressed=" + cutSceneBlock.sizeUncompressed);
+            } else {
+                cutSceneDecompData = cutSceneBlock.data;
+            }
+            
+            //==================================================
+            // here we change text block and cut scene data
+            //==================================================
+            //for now cut scene data
+            
+            List<CSVRecord> records;
+            try {
+                CSVParser p = CSVFormat.DEFAULT.parse(new FileReader(translationFile));
+                records = p.getRecords();
+                p.close();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+            
+            records.forEach(r -> System.out.println(r));
+            
+            for(int i = 0; i < 4; i++) {
+                CSVRecord record = records.get(i);
+                byte[] command = Utils.hexStringToByteArray(record.get(2));
+                
+                List<Integer> matches = Utils.find(command, cutSceneDecompData);
+                
+                if(matches.isEmpty()) {
+                    System.out.println("not found in cut scene: " + record);
+                } else if(matches.size() > 1) {
+                    System.out.println("multiple found ("+ matches.size() +") in cut scene: " + record);
+                }
+                
+                int pos = matches.get(0);
+                
+                //we just reverse the dialogs
+                CSVRecord replaceRecord = records.get(records.size() - 1 - i);
+                byte[] replaceCommand = Utils.hexStringToByteArray(replaceRecord.get(2));
+                
+                List<Integer> matches2 = Utils.find(replaceCommand, cutSceneDecompData);
+                int pos2 = matches2.get(0);
+                
+                //swap
+                cutSceneDecompData = Utils.replace(replaceCommand, pos, cutSceneDecompData);
+                cutSceneDecompData = Utils.replace(command, pos2, cutSceneDecompData);
+            }
+            
+            
+            //===================================================
+            
+            
+            //if cut scene block was compressed we compress it again
+            //leads to an error as soon as the cut scene script is evaluated 
+            if(cutSceneBlock.compressed) {
+                byte[] compressData = LZSS.compress(cutSceneDecompData, cutSceneBlock.data.length);
+                
+                System.out.println("compressed cut scene block data len=" + compressData.length);
+                
+                //update data
+                cutSceneBlock.data = compressData;
+                cutSceneBlock.size = compressData.length;
+            }
+        }
+        
+    }
     
     //extra injected
     //if(true) { //subBlock.getPath().equals("26046/13")) {
