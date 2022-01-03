@@ -18,11 +18,24 @@ public class HuffmanCode extends ArrayList<HuffmanChar> {
     
     //if this is a segment it tells us the first byte position difference to the whole textblock
     //this is used to know the pointer position when dialog is loaded
+    @Deprecated
     private String byteDiffInHex;
     
     //if this is a segment it tells us the first byte position difference to the whole textblock
     //it is the updated version after we embedded the translated text
+    @Deprecated
     private String byteDiffInHexUpdated;
+    
+    private String bitInHex;
+    
+    //the original command to reach this segment
+    private byte[] command;
+    
+    //the positions of the original command
+    private List<Integer> commandPositions = new ArrayList<>();
+    
+    //the new command
+    private byte[] newCommand;
 
     public ParseNode getHuffmanTreeRoot() {
         return huffmanTreeRoot;
@@ -50,20 +63,58 @@ public class HuffmanCode extends ArrayList<HuffmanChar> {
         return sb.toString();
     }
 
+    @Deprecated
     public String getByteDiffInHex() {
         return byteDiffInHex;
     }
 
+    @Deprecated
     public void setByteDiffInHex(String byteDiffInHex) {
         this.byteDiffInHex = byteDiffInHex;
     }
 
+    @Deprecated
     public String getByteDiffInHexUpdated() {
         return byteDiffInHexUpdated;
     }
 
+    @Deprecated
     public void setByteDiffInHexUpdated(String byteDiffInHexUpdated) {
         this.byteDiffInHexUpdated = byteDiffInHexUpdated;
+    }
+
+    public String getBitInHex() {
+        return bitInHex;
+    }
+
+    public void setBitInHex(String bitInHex) {
+        this.bitInHex = bitInHex;
+    }
+
+    public byte[] getCommand() {
+        return command;
+    }
+
+    public void setCommand(byte[] command) {
+        this.command = command;
+    }
+
+    public List<Integer> getCommandPositions() {
+        return commandPositions;
+    }
+
+    public void setCommandPositions(List<Integer> commandPositions) {
+        this.commandPositions = commandPositions;
+    }
+
+    
+
+    public byte[] getNewCommand() {
+        return newCommand;
+    }
+
+    public void setNewCommand(byte[] newCommand) {
+        this.newCommand = newCommand;
     }
     
     //text is utf-8 (ascii) chars
@@ -137,11 +188,13 @@ public class HuffmanCode extends ArrayList<HuffmanChar> {
                 
                 ch.setStartBit(bitIndex);
                 
+                //wo do net need this anymore
                 ch.setStartBitInByte(bitIndex % 8);
                 ch.setByteIndex(bitIndex / 8);
                 
                 bitIndex += ch.getBits().length();
                 
+                //also we do not need this
                 ch.setEndBit(bitIndex);
             }
         }
