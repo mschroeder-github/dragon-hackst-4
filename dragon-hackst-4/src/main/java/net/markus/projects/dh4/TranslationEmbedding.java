@@ -6,6 +6,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -650,12 +651,23 @@ public class TranslationEmbedding {
         System.out.println(id2tb.size() + " unique textblocks found");
 
         Set<String> hexIdWhitelist = new HashSet<>();
-        hexIdWhitelist.add("006C");
+        //hexIdWhitelist.add("006C"); //first scene
+        //hexIdWhitelist.add("0067"); //in town: would work
+        //hexIdWhitelist.add("0068"); //the house in top-right corner
+        //hexIdWhitelist.add("0065"); //the house in bottom-right corner
+        //hexIdWhitelist.add("0069"); //the house in bottom-left corner
+        //hexIdWhitelist.add("0392"); //chapter 1 - castle
+        //hexIdWhitelist.add("0390"); //chapter 1 - town
         
         List<String> cutSceneBlockNotFound = new ArrayList<>();
         List<String> cutSceneCommandNotAvail = new ArrayList<>();
         List<String> patched = new ArrayList<>();
+        
+        List<CSVRecord> globalCommandNotFound = new ArrayList<>();
+        List<CSVRecord> globalCommandFound = new ArrayList<>();
 
+        List<TextLineRef> textLineRefs = new ArrayList<>();
+        
         for (File translationFile : translationFolder.listFiles()) {
             if (!translationFile.getName().endsWith(".csv")) {
                 continue;
@@ -673,49 +685,73 @@ public class TranslationEmbedding {
             StarZerosSubBlock sb = textblocks.get(0).subBlock;
 
             List<StarZerosSubBlock> cutSceneBlocks = new ArrayList<>();
+            List<StarZerosSubBlock> type40Blocks = new ArrayList<>();
+            Map<StarZerosSubBlock, byte[]> child2data = new HashMap<>();
             for (StarZerosSubBlock child : sb.parent.starZerosBlocks) {
                 if (child.type == 39) {
                     cutSceneBlocks.add(child);
-                    break;
                 }
+                if (child.type == 40) {
+                    type40Blocks.add(child);
+                }
+                
+                //get all of them to maybe find dialog pointer somewhere else
+                byte[] childData;
+                if (child.compressed) {
+                    DQLZS.DecompressResult decompressResult = DQLZS.decompress(child.data, child.sizeUncompressed, false);
+                    childData = decompressResult.data;
+                    //System.out.println("uncompressed cut scene block data len=" + cutSceneDecompData.length + " sizeUncompressed=" + cutSceneBlock.sizeUncompressed);
+                } else {
+                    childData = child.data;
+                }
+                child2data.put(child, childData);
             }
-
-            if (cutSceneBlocks.isEmpty()) {
-                System.out.println("cut scene block not found for " + hexId);
-                cutSceneBlockNotFound.add(hexId);
-                
-                //check the other blocks 
-                //for (StarZerosSubBlock child : sb.parent.starZerosBlocks) {
-                //    System.out.println("other child: " + child);
-                //}
-                
-                //no these are not "dummy" text blocks, they have actual text
-                //TextBlock tb = textblocks.get(0);
-                //System.out.println(hbd.parseTree(tb.huffmanTreeBytes).toStringTree());
-                
-                continue;
-            }
-            
-            //never happens
-            //if (cutSceneBlocks.size() > 1) {
-            //    System.out.println("multiple cut scene blocks found for " + hexId);
-            //}
-            
-            StarZerosSubBlock cutSceneBlock = cutSceneBlocks.get(0);
 
             System.out.println(
                     hexId + " with " + textblocks.size() + " textblocks in subblock " + sb.getPath()
-                    + ", cut scene block " + cutSceneBlock.getPath() + " compressed: " + cutSceneBlock.compressed
+                    + ", number of cut scene blocks (type 39)=" + cutSceneBlocks.size() + ", number of type40 blocks=" + type40Blocks.size()
             );
 
             byte[] cutSceneDecompData = null;
-            if (cutSceneBlock.compressed) {
-                DQLZS.DecompressResult decompressResult = DQLZS.decompress(cutSceneBlock.data, cutSceneBlock.sizeUncompressed, false);
-                cutSceneDecompData = decompressResult.data;
-
-                System.out.println("uncompressed cut scene block data len=" + cutSceneDecompData.length + " sizeUncompressed=" + cutSceneBlock.sizeUncompressed);
-            } else {
-                cutSceneDecompData = cutSceneBlock.data;
+            boolean hasScript = false;
+            if(!cutSceneBlocks.isEmpty()) {
+                StarZerosSubBlock cutSceneBlock = cutSceneBlocks.get(0);
+                hasScript = true;
+                
+                if (cutSceneBlock.compressed) {
+                    DQLZS.DecompressResult decompressResult = DQLZS.decompress(cutSceneBlock.data, cutSceneBlock.sizeUncompressed, false);
+                    cutSceneDecompData = decompressResult.data;
+                    //System.out.println("uncompressed cut scene block data len=" + cutSceneDecompData.length + " sizeUncompressed=" + cutSceneBlock.sizeUncompressed);
+                } else {
+                    cutSceneDecompData = cutSceneBlock.data;
+                }
+                
+                //should never happen
+                if(cutSceneBlocks.size() > 1) {
+                    throw new RuntimeException("multiple type 39 blocks");
+                }
+            }
+            
+            boolean hasType40 = false;
+            Map<StarZerosSubBlock, byte[]> type40blockDataMap = new HashMap<>();
+            for(StarZerosSubBlock type40Block : type40Blocks) {
+                hasType40 = true;
+                byte[] type40blockData;
+                
+                if (type40Block.compressed) {
+                    DQLZS.DecompressResult decompressResult = DQLZS.decompress(type40Block.data, type40Block.sizeUncompressed, false);
+                    type40blockData = decompressResult.data;
+                    //System.out.println("uncompressed type40 data len=" + type40blockData.length + " sizeUncompressed=" + type40Block.sizeUncompressed);
+                } else {
+                    type40blockData = type40Block.data;
+                }
+                
+                type40blockDataMap.put(type40Block, type40blockData);
+                
+                //happens
+                //if(type40Blocks.size() > 1) {
+                //    throw new RuntimeException("multiple type 40 blocks");
+                //}
             }
             
             //==================================================
@@ -733,94 +769,135 @@ public class TranslationEmbedding {
             }
             
             //quick check if commands are available
-            List<CSVRecord> notFound = new ArrayList<>();
+            //List<CSVRecord> notFound = new ArrayList<>();
             for(CSVRecord record : records) {
+                
+                TextLineRef textLineRef = new TextLineRef();
+                textLineRefs.add(textLineRef);
+                
+                //context info
+                textLineRef.hexId = hexId;
+                textLineRef.translationFile = translationFile;
+                textLineRef.textblocks = textblocks;
+                textLineRef.textLine = record;
+                
                 byte[] command = Utils.hexStringToByteArray(record.get(2));
                 
-                List<Integer> matches = Utils.find(command, cutSceneDecompData);
-                if(matches.isEmpty()) {
-                    notFound.add(record);
-                }
-            }
-            if(!notFound.isEmpty()) {
-                System.out.println("command not found: " + notFound.size() + "/" + records.size());
+                boolean foundInType39 = false;
                 
-                //try to find it in another cut scene script
-                //does not seem to find any other match
-                //so maybe these dialogs are loaded in another way
-                /*
-                for(Entry<StarZerosSubBlock, byte[]> entry : cutSceneBlockDecompressedMap.entrySet()) {
-                    for(CSVRecord record : notFound) {
-                        byte[] command = Utils.hexStringToByteArray(record.get(2));
-
-                        List<Integer> matches = Utils.find(command, entry.getValue());
-                    
-                        if(!matches.isEmpty()) {
-                            System.out.println("found " + matches.size() + " matches in " + entry.getKey());
-                        }
-                    }
-                }
-                */
-                
-                //check the other blocks in children
-                //does not work as well
-                /*
-                for (StarZerosSubBlock child : sb.parent.starZerosBlocks) {
-                    System.out.println("other child: " + child);
-                    
-                    byte[] possibleCutSceneData = null;
-                    if (child.compressed) {
-                        DQLZS.DecompressResult decompressResult = DQLZS.decompress(child.data, child.sizeUncompressed, false);
-                        possibleCutSceneData = decompressResult.data;
-
-                        System.out.println("uncompressed cut scene block data len=" + possibleCutSceneData.length + " sizeUncompressed=" + child.sizeUncompressed);
+                if(hasScript) {
+                    List<Integer> matches = Utils.find(command, cutSceneDecompData);
+                    if(matches.isEmpty()) {
+                        
+                        
+                        //notFound.add(record);
+                        //globalCommandNotFound.add(record);
+                        
+                        
                     } else {
-                        possibleCutSceneData = child.data;
+                        textLineRef.refType = "C021A0";
+                        textLineRef.refBlock = cutSceneBlocks.get(0);
+                        textLineRef.matches = matches;
+                        
+                        foundInType39 = true;
                     }
+                }
+                
+                boolean foundInType40 = false;
+                if(!foundInType39 && hasType40) {
+                    //search in type 40 block (FFF0 case)
                     
-                    for(CSVRecord record : notFound) {
-                        byte[] command = Utils.hexStringToByteArray(record.get(2));
+                    //C2 1E 20 39
+                    String dialogInfoHex = record.get(2).substring(9, record.get(2).length());
+                    byte[] dialogInfo = Utils.hexStringToByteArray(dialogInfoHex);
+                    
+                    for(StarZerosSubBlock type40Block : type40Blocks) {
+                    
+                        List<Integer> matches = Utils.find(dialogInfo, type40blockDataMap.get(type40Block));
+                        if(matches.isEmpty()) {
 
-                        List<Integer> matches = Utils.find(command, cutSceneDecompData);
-                    
-                        if(!matches.isEmpty()) {
-                            System.out.println("found " + matches.size() + " matches in " + child);
+                            //notFound.add(record);
+                            //globalCommandNotFound.add(record);
+
+                        } else {
+                            textLineRef.refType = "FFF0";
+                            textLineRef.refBlock = type40Blocks.get(0);
+                            textLineRef.matches = matches;
+                            
+                            foundInType40 = true;
                         }
+                    
                     }
                 }
                 
-                System.out.println(Utils.toHexDump(cutSceneDecompData, 64));
-                
-                System.out.println("should be found:");
-                notFound.forEach(nf -> System.out.println(nf.get(2)));
-                System.out.println();
-                
-                System.out.println("what we found:");
-                byte[] commandStart = Utils.hexStringToByteArray("c0 21 a0");
-                List<Integer> matches = Utils.find(commandStart, cutSceneDecompData);
-                for(Integer match : matches) {
-                    System.out.println(Utils.toHexString(Arrays.copyOfRange(cutSceneDecompData, match - 14, match + 28)) + " ...");
+                boolean foundInExtra = false;
+                if(!foundInType39 && !foundInType40) {
+                    
+                    String dialogInfoHex = record.get(2).substring(9, record.get(2).length());
+                    byte[] dialogInfo = Utils.hexStringToByteArray(dialogInfoHex);
+                    
+                    byte[] bitOffset = Utils.hexStringToByteArray(record.get(3));
+                    
+                    List<byte[]> patterns = new ArrayList<>();
+                    patterns.add(dialogInfo);//works 2221 times
+                    patterns.add(Utils.reverse(dialogInfo));
+                    patterns.add(bitOffset);
+                    patterns.add(Utils.reverse(bitOffset));
+                    
+                    List<String> patternName = Arrays.asList("dialogInfo", "dialogInfo-reversed", "bitOffset", "bitOffset-reversed");
+                    
+                    List<Entry<StarZerosSubBlock,byte[]>> entries = new ArrayList<>(child2data.entrySet());
+                    entries.sort((a,b) -> Integer.compare(b.getKey().type, a.getKey().type));
+                    
+                    for(Entry<StarZerosSubBlock,byte[]> entry : entries) {
+                        
+                        int p = 0;
+                        for(byte[] pattern : patterns) {
+                        
+                            List<Integer> matches = Utils.find(pattern, entry.getValue());
+
+                            if(!matches.isEmpty()) {
+                                //found again happens only once
+                                textLineRef.refType = "extra-" + patternName.get(p);
+                                textLineRef.refBlock = entry.getKey();
+                                textLineRef.matches = matches;
+                                textLineRef.pattern = Utils.toHexString(pattern);
+                                
+                                //System.out.println("\textra type " + entry.getKey().type);
+                                //39->cut scene, 42->text block, 46
+
+
+                                foundInExtra = true;
+                            }
+                            
+                            if(foundInExtra)
+                                break;
+                            
+                            p++;
+                        }
+                        
+                        if(foundInExtra)
+                            break;
+                    }
+                    
                 }
-                System.out.println();
-                */
-                
-                cutSceneCommandNotAvail.add(hexId);
-                continue;
             }
+            
 
             //build huffman tree, huffman code, patch textblocks, store in segments the commands
-            List<HuffmanCode> segments = patchTextBlocks(records, hexId, textblocks, hbd);
+            //List<HuffmanCode> segments = patchTextBlocks(records, hexId, textblocks, hbd);
             
             //replace old command with new ones
-            cutSceneDecompData = patchCutSceneScript(segments, cutSceneDecompData);
+            //cutSceneDecompData = patchCutSceneScript(segments, cutSceneDecompData);
             
             //keep track what was patched
-            patched.add(hexId);
+            //patched.add(hexId);
             
             //===================================================
             //if cut scene block was compressed we compress it again
             //leads to an error as soon as the cut scene script is evaluated 
             
+            /*
             if (cutSceneBlock.compressed) {
                 byte[] compressData = LZSS.compress(cutSceneDecompData, cutSceneBlock.data.length);
 
@@ -830,11 +907,13 @@ public class TranslationEmbedding {
                 cutSceneBlock.data = compressData;
                 cutSceneBlock.size = compressData.length;
             }
+            */
             
-            System.out.println();
+            //System.out.println();
             
         }//for translation file
 
+        /*
         cutSceneBlockNotFound.sort((a,b) -> a.compareTo(b));
         cutSceneCommandNotAvail.sort((a,b) -> a.compareTo(b));
         patched.sort((a,b) -> a.compareTo(b));
@@ -845,6 +924,43 @@ public class TranslationEmbedding {
         cutSceneCommandNotAvail.forEach(hex -> System.out.println("\t" + hex));
         System.out.println(patched.size() + " patched");
         patched.forEach(hex -> System.out.println("\t" + hex));
+        
+        System.out.println(globalCommandFound.size() + " text lines c0 21 a0 ** ** command found");
+        System.out.println(globalCommandNotFound.size() + " text lines c0 21 a0 ** ** command not found");
+        System.out.println(globalCommandNotFound.size() / (double) (globalCommandFound.size() + globalCommandNotFound.size()) + " not found");
+        */
+        
+        Map<String, Integer> refType2count = new HashMap<>();
+        
+        for(TextLineRef textLineRef : textLineRefs) {
+            
+            if(textLineRef.refType.equals("none") || textLineRef.refType.startsWith("extra"))
+                System.out.println(textLineRef);
+            
+            //count ref types
+            int count = refType2count.computeIfAbsent(textLineRef.refType, str -> 0);
+            refType2count.put(textLineRef.refType, count + 1);
+        }
+        
+        int fff0 = refType2count.getOrDefault("FFF0", 0);
+        int c021a0 = refType2count.getOrDefault("C021A0", 0);
+        int extra = refType2count.getOrDefault("extra", 0);
+        int none = refType2count.getOrDefault("none", 0);
+        
+        double missing = none / (double) (none + c021a0 + fff0 + extra);
+        
+        System.out.println(textLineRefs.size() + " text line refs");
+        System.out.println(refType2count);
+        System.out.println("missing: " + missing);
+        
+        //TODO look at refType=extra-dialogInfo, (type 42),
+        //maybe type 46 is relevant
+        
+        //{FFF0=7953, C021A0=3200, extra-dialogInfo=2109, extra-bitOffset=276, extra-bitOffset-reversed=1349, none=7}
+        
+        //14894 text line refs
+        //{extra=2221, FFF0=7953, none=1520, C021A0=3200}
+        //missing: 0.1020545185980932
         
         int a = 0;
     }
@@ -972,6 +1088,41 @@ public class TranslationEmbedding {
         
         return cutSceneDecompData;
     }
+    
+    private class TextLineRef {
+        
+        private File translationFile;
+        private String hexId;
+        private List<TextBlock> textblocks;
+        
+        private CSVRecord textLine;
+        
+        private String refType = "none";
+        private StarZerosSubBlock refBlock;
+        private List<Integer> matches;
+        private String pattern;
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("TextLineRef{");
+            sb.append("hexId=").append(hexId);
+            sb.append(", textblocks.size=").append(textblocks.size());
+            sb.append(", refType=").append(refType);
+            if(refBlock != null)
+                sb.append(", refBlock=").append(refBlock.getPath() + " (type " + refBlock.type + ")");
+            if(matches != null)
+                sb.append(", matches=").append(matches);
+            sb.append(", textLine=").append(textLine);
+            sb.append('}');
+            return sb.toString();
+        }
+        
+        
+        
+        
+    }
+    
     
     //extra injected
     //if(true) { //subBlock.getPath().equals("26046/13")) {

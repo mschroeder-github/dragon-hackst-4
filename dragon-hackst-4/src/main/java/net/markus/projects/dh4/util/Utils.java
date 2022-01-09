@@ -355,7 +355,7 @@ public class Utils {
     public static List<Integer> find(byte[] pattern, byte[] data) {
         List<Integer> pos = new ArrayList<>();
 
-        for (int i = 0; i < data.length - pattern.length; i++) {
+        for (int i = 0; i < data.length - pattern.length + 1; i++) { //+1 to really get to the last byte
             byte[] copy = Arrays.copyOfRange(data, i, i + pattern.length);
 
             if (Arrays.equals(copy, pattern)) {
@@ -583,4 +583,5 @@ public class Utils {
         
         return sb.toString();
     } 
+    
 }

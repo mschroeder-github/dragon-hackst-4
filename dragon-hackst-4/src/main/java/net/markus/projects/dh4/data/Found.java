@@ -17,7 +17,7 @@ public class Found {
 
     @Override
     public String toString() {
-        return block.getPath() + 
+        return block.getPath()  + " (type " + block.type + ")" + 
                 " from 0x" + Utils.toHexString(Utils.intToByteArray(begin)).replace(" ", "") + 
                 " to 0x" + Utils.toHexString(Utils.intToByteArray(end)).replace(" ", "") + 
                 " | length: " + data.length;
