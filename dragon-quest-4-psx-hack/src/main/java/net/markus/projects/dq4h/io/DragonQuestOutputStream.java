@@ -48,4 +48,22 @@ public class DragonQuestOutputStream {
         write(Converter.shortToBytesLE(s));
     }
     
+    /**
+     * Write byte array as given.
+     * @param bytes
+     * @throws IOException 
+     */
+    public void writeBytesBE(byte[] bytes) throws IOException {
+        write(bytes);
+    }
+    
+    /**
+     * Write byte array in reversed order.
+     * @param bytes
+     * @throws IOException 
+     */
+    public void writeBytesLE(byte[] bytes) throws IOException {
+        write(Converter.reverse(bytes));
+    }
+    
 }

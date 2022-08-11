@@ -16,12 +16,12 @@ public class HeartBeatDataWriter extends DragonQuestWriter<HeartBeatData> {
 
     private HeartBeatDataFolderEntryWriter folderWriter;
     
-    public HeartBeatDataWriter() {
-        folderWriter = new HeartBeatDataFolderEntryWriter();
+    public HeartBeatDataWriter(IOConfig config) {
+        folderWriter = new HeartBeatDataFolderEntryWriter(config);
     }
     
     @Override
-    public int write(HeartBeatData hbd, OutputStream output) throws IOException {
+    public void write(HeartBeatData hbd, OutputStream output) throws IOException {
     
         //write every entry in the given order
         for(HeartBeatDataEntry entry : hbd.getEntries()) {
@@ -46,8 +46,6 @@ public class HeartBeatDataWriter extends DragonQuestWriter<HeartBeatData> {
                 throw new IOException("Unknown entry type " + entry.getClass());
             }
         }
-        
-        return -1;
     }
 
 }

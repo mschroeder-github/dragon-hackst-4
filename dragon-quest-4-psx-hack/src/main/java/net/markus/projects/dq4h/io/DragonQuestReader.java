@@ -8,6 +8,7 @@ import java.io.InputStream;
 
 /**
  * An abstract reader for blocks in the dragon quest psx data.
+ * This class should always read uncompressed data.
  */
 public abstract class DragonQuestReader<T> {
 

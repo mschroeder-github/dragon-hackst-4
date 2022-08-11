@@ -36,8 +36,8 @@ public class DragonQuestBinaryFileReader {
 
     private HeartBeatDataReader heartBeatDataReader;
     
-    public DragonQuestBinaryFileReader() {
-        heartBeatDataReader = new HeartBeatDataReader();
+    public DragonQuestBinaryFileReader(IOConfig config) {
+        heartBeatDataReader = new HeartBeatDataReader(config);
     }
     
     public DragonQuestBinary read(File inputFile) throws IOException {

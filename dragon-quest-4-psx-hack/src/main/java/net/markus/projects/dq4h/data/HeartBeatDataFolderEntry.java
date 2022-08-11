@@ -4,15 +4,18 @@ package net.markus.projects.dq4h.data;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import net.markus.projects.dq4h.compare.ComparatorReport;
+import net.markus.projects.dq4h.compare.DragonQuestComparator;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.FileContent;
+import net.markus.projects.dq4h.io.Verifier;
 
 /**
  * The entry represents a folder with files in it.
  * It consists of one to many 2048 byte blocks.
  * It has a 16 byte header (number of files, number of sectors, size).
  */
-public class HeartBeatDataFolderEntry extends HeartBeatDataEntry {
+public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements DragonQuestComparator<HeartBeatDataFolderEntry> {
 
     /**
      * 0-4, 4 bytes, int
@@ -163,6 +166,16 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry {
         folder.setOriginalNumberOfRemainingBytes(expectedNumberOfRemainingBytes);
         
         return folder;
+    }
+
+    @Override
+    public void compare(HeartBeatDataFolderEntry other, ComparatorReport report) {
+        Verifier.compareNumbers(this, this.index, other, other.index, "index", report);
+        Verifier.compareNumbers(this, this.originalNumberOfFiles, other, other.originalNumberOfFiles, "originalNumberOfFiles", report);
+        Verifier.compareNumbers(this, this.originalNumberOfSectors, other, other.originalNumberOfSectors, "originalNumberOfSectors", report);
+        Verifier.compareLists(this, this.files, other, other.files, "files", report);
+        //originalSize could have changed
+        //originalNumberOfRemainingBytes could have changed
     }
     
     

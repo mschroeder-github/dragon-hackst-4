@@ -28,6 +28,10 @@ public class Converter {
         return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
     }
     
+    public static int bytesToIntBE(byte[] bytes) {
+        return ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt();
+    }
+    
     public static short bytesToShortLE(byte[] bytes) {
         return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).getShort();
     }
@@ -85,7 +89,7 @@ public class Converter {
     
     // ------ short ------------
     
-    public static byte[] shortToBytesLE(int value) {
+    public static byte[] shortToBytesLE(short value) {
         return new byte[]{
             (byte) value,
             (byte) (value >>> 8)

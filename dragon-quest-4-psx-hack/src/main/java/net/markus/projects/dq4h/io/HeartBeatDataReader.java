@@ -20,8 +20,8 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
     
     private HeartBeatDataFolderEntryReader folderReader;
     
-    public HeartBeatDataReader() {
-        folderReader = new HeartBeatDataFolderEntryReader();
+    public HeartBeatDataReader(IOConfig config) {
+        folderReader = new HeartBeatDataFolderEntryReader(config);
     }
     
     @Override
@@ -93,7 +93,7 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
             sectorIndex++;
         }
         
-        hbd.setNumberOfSectors(sectorIndex);
+        hbd.setOriginalNumberOfSectors(sectorIndex);
         
         return hbd;
     }

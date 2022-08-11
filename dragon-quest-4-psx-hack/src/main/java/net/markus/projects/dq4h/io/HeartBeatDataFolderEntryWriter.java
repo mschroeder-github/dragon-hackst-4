@@ -7,31 +7,56 @@ import java.util.HashMap;
 import java.util.Map;
 import net.markus.projects.dq4h.data.HeartBeatDataFile;
 import net.markus.projects.dq4h.data.HeartBeatDataFolderEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 
 /**
  * 
  */
 public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatDataFolderEntry> {
 
-    //TODO here will be special writer used for file formats
+    //special writer used for file formats
+    private HeartBeatDataTextContentWriter textContentWriter;
     
-    public HeartBeatDataFolderEntryWriter() {
+    private IOConfig config;
+    
+    public HeartBeatDataFolderEntryWriter(IOConfig config) {
+        this.config = config;
         
+        textContentWriter = new HeartBeatDataTextContentWriter();
     }
     
     @Override
-    public int write(HeartBeatDataFolderEntry entry, OutputStream output) throws IOException {
+    public void write(HeartBeatDataFolderEntry entry, OutputStream output) throws IOException {
         
         //for each file we need the actual bytes and the uncompressed size (if compressed)
-        //this will be decided once the writer wrote from java object the bytes
         Map<HeartBeatDataFile, FileContent> file2content = new HashMap<>();
         
         //we just use the original data for now
         //this is identity function
         for(HeartBeatDataFile file : entry.getFiles()) {
+            
             FileContent content = new FileContent();
-            content.setBytes(file.getOriginalBytes());
-            content.setSizeUncompressed(file.getOriginalSizeUncompressed());
+            
+            //folder entry writer is responsible for compressing content
+            
+            //text content
+            if(config.getTextContentTypes().contains(file.getOriginalType()) && file.hasContent()) {
+                
+                //should never happen that a text file is compressed
+                if(file.isCompressed()) {
+                    throw new IOException("Text content needs to be compressed");
+                }
+                
+                byte[] contentBytes = textContentWriter.write((HeartBeatDataTextContent) file.getContent());
+                content.setBytes(contentBytes);
+                content.setSizeUncompressed(contentBytes.length);
+                
+            } else {
+                //default case (as is)
+                content.setBytes(file.getOriginalContentBytes());
+                content.setSizeUncompressed(file.getOriginalSizeUncompressed());
+            }
+            
             file2content.put(file, content);
         }
         
@@ -83,7 +108,6 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
         //fill remaining space with zero bytes
         dqos.write(new byte[expectedFolder.getOriginalNumberOfRemainingBytes()]);
         
-        return -1;
     }
 
 }

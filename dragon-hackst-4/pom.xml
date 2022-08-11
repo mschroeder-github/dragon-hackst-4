@@ -42,5 +42,15 @@
             <artifactId>loop-fs-iso-impl</artifactId>
             <version>2.1.0</version>
         </dependency -->
+        <dependency>
+            <groupId>jpsxdec-maven</groupId>
+            <artifactId>jpsxdec-maven</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>discimgreader</groupId>
+            <artifactId>discimgreader</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 </project>

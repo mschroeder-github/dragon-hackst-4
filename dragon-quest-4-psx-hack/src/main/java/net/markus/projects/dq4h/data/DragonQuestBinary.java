@@ -3,12 +3,15 @@ package net.markus.projects.dq4h.data;
 
 import java.util.HashMap;
 import java.util.Map;
+import net.markus.projects.dq4h.compare.ComparatorReport;
+import net.markus.projects.dq4h.compare.DragonQuestComparator;
 import net.markus.projects.dq4h.io.DiskFileInfo;
+import net.markus.projects.dq4h.io.Verifier;
 
 /**
- * The CD image (*.bin) file of dragon quest psx versionU.
+ * The CD image (*.bin) file of dragon quest psx version.
  */
-public class DragonQuestBinary {
+public class DragonQuestBinary implements DragonQuestComparator<DragonQuestBinary> {
 
     private HeartBeatData heartBeatData;
     private PsxExe executable;
@@ -64,6 +67,13 @@ public class DragonQuestBinary {
     @Override
     public String toString() {
         return "DragonQuestBinary{" + "sectors=" + diskFiles + '}';
+    }
+
+    @Override
+    public void compare(DragonQuestBinary other, ComparatorReport report) {
+        Verifier.compareBytes(this.executable, this.executable.getData(), other.executable, other.executable.getData(), "executable", report);
+        Verifier.compareBytes(this.systemConfig, this.systemConfig.getData(), other.systemConfig, other.systemConfig.getData(), "systemConfig", report);
+        this.heartBeatData.compare(other.heartBeatData, report);
     }
     
 }

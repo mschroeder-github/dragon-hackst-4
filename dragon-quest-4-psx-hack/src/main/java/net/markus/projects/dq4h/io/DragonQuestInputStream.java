@@ -12,21 +12,36 @@ import java.io.InputStream;
 public class DragonQuestInputStream {
 
     private InputStream inputStream;
+    private int position;
+    
     
     public DragonQuestInputStream(InputStream inputStream) {
         this.inputStream = inputStream;
+        this.position = 0;
     }
 
     public int read(byte[] b) throws IOException {
-        return inputStream.read(b);
+        int read = inputStream.read(b);
+        if(read != -1) {
+            position += read;
+        }
+        return read;
     }
 
     public int read(byte[] b, int off, int len) throws IOException {
-        return inputStream.read(b, off, len);
+        int read = inputStream.read(b, off, len);
+        if(read != -1) {
+            position += read;
+        }
+        return read;
     }
 
     public long skip(long n) throws IOException {
-        return inputStream.skip(n);
+        long skipped = inputStream.skip(n);
+        if(skipped != -1) {
+            position += skipped;
+        }
+        return skipped;
     }
 
     public void close() throws IOException {
@@ -56,15 +71,31 @@ public class DragonQuestInputStream {
     }
     
     /**
-     * Reads <i>n</i> bytes from the stream and returns it.
+     * Reads <i>n</i> bytes from the stream and returns it as big endian (the normal way the bytes are read).
      * @param n number of bytes, greater equal 0
      * @return
      * @throws IOException 
      */
-    public byte[] readBytes(int n) throws IOException {
+    public byte[] readBytesBE(int n) throws IOException {
+        if(n <= 0) {
+            return new byte[0];
+        }
+        
         byte[] b = new byte[n];
         read(b);
         return b;
+    }
+    
+    /**
+     * Reads <i>n</i> bytes from the stream and returns it as little endian.
+     * It is the same as {@link #readBytesBE(int) } but reversed.
+     * This is the usual way to read bytes in Dragon Quest 4.
+     * @param n number of bytes, greater equal 0
+     * @return
+     * @throws IOException 
+     */
+    public byte[] readBytesLE(int n) throws IOException {
+        return Converter.reverse(readBytesBE(n));
     }
     
     /**
@@ -91,6 +122,10 @@ public class DragonQuestInputStream {
         
         baos.close();
         return baos.toByteArray();
+    }
+
+    public int getPosition() {
+        return position;
     }
     
 }

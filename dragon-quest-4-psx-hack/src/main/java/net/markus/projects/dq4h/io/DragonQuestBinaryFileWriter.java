@@ -20,8 +20,8 @@ public class DragonQuestBinaryFileWriter  {
     
     private HeartBeatDataWriter hbdWriter;
     
-    public DragonQuestBinaryFileWriter() {
-        hbdWriter = new HeartBeatDataWriter();
+    public DragonQuestBinaryFileWriter(IOConfig config) {
+        hbdWriter = new HeartBeatDataWriter(config);
     }
     
     public void patch(DragonQuestBinary bin, File input, File output) throws IOException {

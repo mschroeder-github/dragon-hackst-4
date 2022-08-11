@@ -6,7 +6,7 @@ package net.markus.projects.dq4h.data;
  */
 public abstract class HeartBeatDataEntry {
 
-    private int index;
+    protected int index;
 
     /**
      * The index of the entry.

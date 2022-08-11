@@ -63,6 +63,11 @@ public class Inspector {
         return sb.toString().trim();
     }
     
+    /**
+     * Converts bytes to a hexadecimal string without spaces.
+     * @param bytes
+     * @return 
+     */
     public static String toHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
         for (int j = 0; j < bytes.length; j++) {
