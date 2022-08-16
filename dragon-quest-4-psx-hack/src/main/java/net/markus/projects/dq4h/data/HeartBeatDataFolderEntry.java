@@ -52,6 +52,22 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
     public List<HeartBeatDataFile> getFiles() {
         return files;
     }
+    
+    /**
+     * Returns a list of text contents found in {@link #getFiles() }.
+     * @param <T>
+     * @param type
+     * @return 
+     */
+    public <T extends HeartBeatDataFileContent> List<T> getContents(Class<T> type) {
+        List<T> list = new ArrayList<>();
+        for(HeartBeatDataFile f : getFiles()) {
+            if(f.hasContent() && f.getContent().getClass().isAssignableFrom(type)) {
+                list.add((T) f.getContent());
+            }
+        }
+        return list;
+    }
 
     /**
      * The origial number of files in the data.

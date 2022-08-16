@@ -11,7 +11,7 @@ import java.util.Set;
 import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.data.HuffmanCharacter;
 import net.markus.projects.dq4h.data.HuffmanNode;
-import net.markus.projects.dq4h.data.KeyValuePair;
+import net.markus.projects.dq4h.data.VariableToDialogPointer;
 
 /**
  * Writes {@link HeartBeatDataTextContent}.
@@ -21,18 +21,40 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
     @Override
     public void write(HeartBeatDataTextContent textContent, OutputStream output) throws IOException {
         
-        //1. count how often a character occurs in the textContent.getText()
-        //we need a set of nodes where frequency is set
-        Set<HuffmanNode> nodes = toUniqueNodesWithFrequencies(textContent.getText());
+        byte[] treeBytes;
+        byte[] textBytes;
+        short numberOfNodes;
         
-        //2. get the tree from nodes with frequency 
-        HuffmanNode tree = createHuffmanTree(nodes);
-        //System.out.println(tree.toStringTree());
-        
-        //3. encode tree and text with tree
-        byte[] treeBytes = toHuffmanTreeBytes(tree);
-        byte[] textBytes = encodeText(textContent.getText(), tree);
-        
+        //when we patch it
+        //we have to calculate tree and text
+        if(textContent.isPerformPatch()) {
+
+            //1. count how often a character occurs in the textContent.getText()
+            //we need a set of nodes where frequency is set
+            Set<HuffmanNode> nodes = toUniqueNodesWithFrequencies(textContent.getText());
+
+            //2. get the tree from nodes with frequency 
+            HuffmanNode tree = createHuffmanTree(nodes);
+            //System.out.println(tree.toStringTree());
+
+            //TODO we maybe have to make the tree artificially bigger to have more bytes
+            
+            //3. encode tree and text with tree
+            treeBytes = toHuffmanTreeBytes(tree);
+            textBytes = encodeText(textContent.getText(), tree);
+            
+            //just the nodes
+            //root has the highest number
+            //0 ... 5 = 6 nodes, thus + 1
+            numberOfNodes = (short) (tree.getID() + 1);
+            
+        } else {
+            
+            //the original content
+            treeBytes = textContent.getOriginalTreeBytes();
+            textBytes = textContent.getOriginalTextBytes();
+            numberOfNodes = textContent.getOriginalHuffmanTreeNumberOfNodes();
+        }
         
         //4. write it correctly
         int end = 
@@ -44,26 +66,22 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
                 textContent.getOriginalUnknown3().length;
         
         int huffmanTextStart = 
-                4 * 6 + 
+                4 * 6 + //header
                 textContent.getOriginalUnknown2().length;
         
         int huffmanTextEnd = 
                 huffmanTextStart + 
-                treeBytes.length;
+                textBytes.length;
         
         int huffmanTreeEnd =
                 huffmanTextEnd +
-                10 +
+                10 + //tree header
                 treeBytes.length;
         
         if(huffmanTreeEnd == end) {
             huffmanTreeEnd = 0;
         }
         
-        //just the nodes
-        //root has the highest number
-        //0 ... 5 = 6 nodes, thus + 1
-        short numberOfNodes = (short) (tree.getID() + 1);
         int huffmanTreeStart = huffmanTextEnd + 10;
         int huffmanTreeMiddle = huffmanTreeStart + (treeBytes.length / 2) - 1;
         
@@ -89,11 +107,21 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         
         dqos.writeIntLE(end);
         
-        dqos.writeIntLE(textContent.getKeyValuePairs().size());
-        for(KeyValuePair kvp : textContent.getKeyValuePairs()) {
-            dqos.writeBytesLE(kvp.getKey());
-            dqos.writeBytesLE(kvp.getValue());
+        if(textContent.isPerformPatch()) {
+            dqos.writeIntLE(textContent.getDialogPointers().size());
+            for(VariableToDialogPointer kvp : textContent.getDialogPointers()) {
+                dqos.writeBytesLE(kvp.getVariable());
+                dqos.writeBytesLE(kvp.getValue());
+            }
+            
+        } else {
+            dqos.writeIntLE(textContent.getOriginalDialogPointers().size());
+            for(VariableToDialogPointer kvp : textContent.getOriginalDialogPointers()) {
+                dqos.writeBytesLE(kvp.getVariable());
+                dqos.writeBytesLE(kvp.getValue());
+            }
         }
+        
     }
     
     //tree =========================

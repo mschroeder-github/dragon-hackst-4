@@ -10,7 +10,7 @@ import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.data.HuffmanCharacter;
 import net.markus.projects.dq4h.data.HuffmanNode;
 import net.markus.projects.dq4h.data.HuffmanNode.Type;
-import net.markus.projects.dq4h.data.KeyValuePair;
+import net.markus.projects.dq4h.data.VariableToDialogPointer;
 
 /**
  * Reads {@link HeartBeatDataTextContent}.
@@ -38,6 +38,8 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         int textBytesLen = textContent.getOriginalHuffmanTextEnd() - textContent.getOriginalHuffmanTextStart();
         byte[] textBytes = dqis.readBytesBE(textBytesLen);
         
+        textContent.setOriginalTextBytes(textBytes);
+        
         //now we should be at the text end position
         if(dqis.getPosition() != textContent.getOriginalHuffmanTextEnd()) {
             throw new IOException("Not at text end position");
@@ -57,6 +59,8 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         int treeBytesLen = correctTreeEnd - textContent.getOriginalHuffmanTreeStart();
         byte[] treeBytes = dqis.readBytesBE(treeBytesLen);
         
+        textContent.setOriginalTreeBytes(treeBytes);
+        
         //dataDA
         textContent.setOriginalUnknown3(dqis.readBytesBE(textContent.getOriginalEnd() - correctTreeEnd));
         
@@ -66,30 +70,42 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         
         textContent.setOriginalAtEnd(dqis.readIntLE());
         
-        //key values pairs containing in value dialog pointers
-        textContent.setOriginalNumberOfPointers(dqis.readIntLE());
-        List<KeyValuePair> kvps = new ArrayList<>();
-        for(int i = 0; i < textContent.getOriginalNumberOfPointers(); i++) {
-            KeyValuePair kvp = new KeyValuePair();
-            kvp.setKey(dqis.readBytesLE(4));
-            kvp.setValue(dqis.readBytesLE(4));
-            kvps.add(kvp);
-        }
-        textContent.setKeyValuePairs(kvps);
-        
-        HuffmanNode rootNode = parseTree(treeBytes);
+        HuffmanNode originalTree = parseTree(treeBytes);
         
         //get the characters
-        List<HuffmanCharacter> text = decodeText(textBytes, rootNode);
+        List<HuffmanCharacter> originalText = decodeText(textBytes, originalTree);
         
-        textContent.setTree(rootNode);
-        textContent.setText(text);
+        textContent.setOriginalTree(originalTree);
+        textContent.setOriginalText(originalText);
         
-        //inspect
+        //key values pairs containing in value dialog pointers
+        textContent.setOriginalNumberOfPointers(dqis.readIntLE());
+        for(int i = 0; i < textContent.getOriginalNumberOfPointers(); i++) {
+            VariableToDialogPointer vdp = new VariableToDialogPointer();
+            vdp.setVariable(dqis.readBytesLE(4));
+            vdp.setValue(dqis.readBytesLE(4));
+            textContent.getDialogPointers().add(vdp);
+            
+            //a copy to keep the original
+            VariableToDialogPointer vdpCopy = new VariableToDialogPointer();
+            vdpCopy.setVariable(vdp.getVariable());
+            vdpCopy.setValue(vdp.getValue());
+            textContent.getOriginalDialogPointers().add(vdp);
+        }
+        
+        //short inspection
+        //System.out.println(textContent);
         //System.out.println(textContent.getTreeAsString());
         //System.out.println(textContent.getTextAsString());
-        //System.out.println(textContent.getKeyValuePairsAsString());
-        //System.out.println(textContent);
+        //System.out.println(textContent.getDialogPointersAsString());
+        //textContent.getText().forEach(c -> System.out.println(c));
+                
+        //they always point to the correct text id
+        for(VariableToDialogPointer vdp : textContent.getDialogPointers()) {
+            if(!Arrays.equals(vdp.getTextId(), textContent.getId2Bytes())) {
+                throw new IOException("Dialog pointer points to another text id then its own: " + vdp + " " + textContent);
+            }
+        }
         
         return textContent;
     }
@@ -180,7 +196,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         StringBuilder sb = new StringBuilder();
         
         HuffmanNode node = huffmanTreeRoot;
-        String bitBuffer = "";
+        StringBuilder bitBuffer = new StringBuilder();
         
         int startBit = 0;
         
@@ -196,7 +212,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
                 node = node.getRightChild();
             }
             
-            bitBuffer += bit;
+            bitBuffer.append(bit);
             
             HuffmanCharacter huffmanChar = null;
             
@@ -206,7 +222,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
             
             //if found
             if(huffmanChar != null) {
-                huffmanChar.setOriginalBits(bitBuffer);
+                huffmanChar.setOriginalBits(bitBuffer.toString());
                 huffmanChar.setOriginalBitPosition(startBit);
                 //huffmanChar.setEndBit(i);
                 //huffmanChar.setByteIndex(startBit / 8);
@@ -215,10 +231,24 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
                 text.add(huffmanChar);
                 
                 node = huffmanTreeRoot;
-                bitBuffer = "";
+                bitBuffer.delete(0, bitBuffer.length());
                 startBit = i + 1;
             }
         }
+        
+        //fixing the end because there are many 0000000* bits which are wrongly turned into characters
+        //decode text goes backward and searches for the last (not {0000}) {0000} pair
+        int i;
+        for(i = text.size()-1; i > 0; i--) {
+            HuffmanCharacter n = text.get(i);
+            HuffmanCharacter n_1 = text.get(i-1);
+            
+            if(!n_1.getNode().isNullCharacter() && n.getNode().isNullCharacter()) {
+                break;
+            }
+        }
+        
+        text = text.subList(0, i+1);
         
         return text;
     }

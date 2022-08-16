@@ -91,6 +91,8 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
             
             entryIndex++;
             sectorIndex++;
+            
+            //System.out.println(entryIndex + " read");
         }
         
         hbd.setOriginalNumberOfSectors(sectorIndex);

@@ -1,6 +1,7 @@
 
 package net.markus.projects.dq4h.data;
 
+import java.util.ArrayList;
 import java.util.List;
 import net.markus.projects.dq4h.compare.ComparatorReport;
 import net.markus.projects.dq4h.compare.DragonQuestComparator;
@@ -35,11 +36,24 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     private int originalAtEnd;
     private int originalNumberOfPointers;
     
-    //the actual content
+    private byte[] originalTreeBytes;
+    private byte[] originalTextBytes;
+    private List<VariableToDialogPointer> originalDialogPointers;
     
+    private HuffmanNode originalTree;
+    private List<HuffmanCharacter> originalText;
+    
+    //the content which can be changed
+    
+    private boolean performPatch;
     private HuffmanNode tree;
     private List<HuffmanCharacter> text;
-    private List<KeyValuePair> keyValuePairs;
+    private List<VariableToDialogPointer> dialogPointers;
+
+    public HeartBeatDataTextContent() {
+        this.dialogPointers = new ArrayList<>();
+        this.originalDialogPointers = new ArrayList<>();
+    }
 
     /**
      * The ID is a four byte array starting with zeros, e.g. 0x0000006C. 
@@ -48,6 +62,33 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
      */
     public byte[] getId() {
         return id;
+    }
+    
+    /**
+     * The id but in two bytes, e.g. 0x023d.
+     * See {@link #getId() }.
+     * @return 
+     */
+    public byte[] getId2Bytes() {
+        return new byte[] { id[2], id[3] };
+    }
+    
+    /**
+     * Returns the offset in bits where the text starts.
+     * This takes also into account {@link #getOriginalUnknown2() }.
+     * Usually this is 24 bytes * 8 bits = 192 = 0xc0.
+     * @return 
+     */
+    public int getTextBitOffset() {
+        return (24 * 8) + (originalUnknown2.length * 8);
+    }
+    
+    /**
+     * Two bytes hex representation of the text id.
+     * @return 
+     */
+    public String getIdHex() {
+        return Inspector.toHex(getId2Bytes());
     }
 
     public void setId(byte[] id) {
@@ -162,7 +203,56 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
         this.originalNumberOfPointers = originalNumberOfPointers;
     }
 
+    public byte[] getOriginalTreeBytes() {
+        return originalTreeBytes;
+    }
+
+    public void setOriginalTreeBytes(byte[] originalTreeBytes) {
+        this.originalTreeBytes = originalTreeBytes;
+    }
+
+    public byte[] getOriginalTextBytes() {
+        return originalTextBytes;
+    }
+
+    public void setOriginalTextBytes(byte[] originalTextBytes) {
+        this.originalTextBytes = originalTextBytes;
+    }
+
+    public List<VariableToDialogPointer> getOriginalDialogPointers() {
+        return originalDialogPointers;
+    }
+
+    public void setOriginalDialogPointers(List<VariableToDialogPointer> originalDialogPointers) {
+        this.originalDialogPointers = originalDialogPointers;
+    }
+
+    public HuffmanNode getOriginalTree() {
+        return originalTree;
+    }
+
+    public void setOriginalTree(HuffmanNode originalTree) {
+        this.originalTree = originalTree;
+    }
+
+    public List<HuffmanCharacter> getOriginalText() {
+        return originalText;
+    }
+
+    public void setOriginalText(List<HuffmanCharacter> originalText) {
+        this.originalText = originalText;
+    }
+    
+    
     //main content ==============
+
+    public boolean isPerformPatch() {
+        return performPatch;
+    }
+
+    public void setPerformPatch(boolean performPatch) {
+        this.performPatch = performPatch;
+    }
     
     public HuffmanNode getTree() {
         return tree;
@@ -170,6 +260,43 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
 
     public List<HuffmanCharacter> getText() {
         return text;
+    }
+    
+    /**
+     * Calculates the characters which are the start of a sentence.
+     * We use the {0000} control character as indicator that after this strings
+     * starts another string.
+     * The result is based on {@link #getOriginalText() }.
+     * We remove the last one if it does not end with a {0000}.
+     * @return 
+     */
+    public List<HuffmanCharacter> getOriginalStartCharacters() {
+        List<HuffmanCharacter> startChars = new ArrayList<>();
+        
+        boolean pick = true;
+        for(HuffmanCharacter c : getOriginalText()) {
+            if(pick) {
+                startChars.add(c);
+                pick = false;
+            }
+            
+            //if {0000} pick next character
+            if(c.getNode().isNullCharacter()) {
+                pick = true;
+            }
+        }
+        
+        HuffmanCharacter lastOne = getOriginalText().get(getOriginalText().size() - 1);
+        //if the last one is not {0000}
+        if(!(lastOne.getNode().isControlCharacter() && lastOne.getNode().isZero())) {
+            //then the last startChars is invalid and can be deleted
+            startChars.remove(startChars.size() - 1);
+        }
+        
+        //remove all {0000}, they cannot be starting characters. this happens in the dummy texts
+        startChars.removeIf(c -> c.getNode().isControlCharacter() && lastOne.getNode().isZero());
+        
+        return startChars;
     }
     
     public void setTree(HuffmanNode treeRoot) {
@@ -180,17 +307,19 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
         this.text = text;
     }
 
-    public List<KeyValuePair> getKeyValuePairs() {
-        return keyValuePairs;
+    public List<VariableToDialogPointer> getDialogPointers() {
+        return dialogPointers;
     }
 
-    public void setKeyValuePairs(List<KeyValuePair> keyValuePairs) {
-        this.keyValuePairs = keyValuePairs;
+    public void setDialogPointers(List<VariableToDialogPointer> dialogPointers) {
+        this.dialogPointers = dialogPointers;
     }
     
     //to string ==================
     
     public String getTextAsString() {
+        if(text == null)
+            return "";
         StringBuilder sb = new StringBuilder();
         for(HuffmanCharacter c : text) {
             sb.append(c.asString());
@@ -199,12 +328,14 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     }
 
     public String getTreeAsString() {
+        if(tree == null)
+            return "";
         return tree.toStringTree();
     }
 
-    public String getKeyValuePairsAsString() {
+    public String getDialogPointersAsString() {
         StringBuilder sb = new StringBuilder();
-        for(KeyValuePair kvp : keyValuePairs) {
+        for(VariableToDialogPointer kvp : dialogPointers) {
             sb.append(kvp.toString()).append("\n");
         }
         return sb.toString().trim();
@@ -238,15 +369,9 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
         Verifier.compareBytes(this, this.originalUnknown2, other, other.originalUnknown2, "originalUnknown2", report);
         Verifier.compareBytes(this, this.originalUnknown3, other, other.originalUnknown3, "originalUnknown3", report);
         Verifier.compareNumbers(this, this.originalHuffmanTreeNumberOfNodes, other, other.originalHuffmanTreeNumberOfNodes, "originalHuffmanTreeNumberOfNodes", report);
-        Verifier.compareLists(this, this.text, other, other.text, "text", report);
+        Verifier.compareLists(this, this.originalText, other, other.originalText, "originalText", report);
      
         //all offsets could have changed because tree and text byte arrays changed
     }
-    
-    
-    
-    
-    
-    
     
 }

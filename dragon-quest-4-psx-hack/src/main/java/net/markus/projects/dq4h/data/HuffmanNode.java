@@ -8,6 +8,7 @@ import java.util.Objects;
 import net.markus.projects.dq4h.io.Converter;
 import net.markus.projects.dq4h.io.Inspector;
 import net.markus.projects.dq4h.io.ShiftJIS;
+import net.markus.projects.dq4h.io.Verifier;
 
 /**
  * Represents a node in a hufman tree used by {@link HeartBeatDataTextContent}.
@@ -74,6 +75,23 @@ public class HuffmanNode {
      */
     public boolean isLeaf() {
         return isControlCharacter() || isCharacter();
+    }
+    
+    /**
+     * Returns true if the content is {0000}.
+     * @return 
+     */
+    public boolean isZero() {
+        return Verifier.allZero(content);
+    }
+    
+    /**
+     * Checks if it is '\0' which is the case
+     * when {@link #isZero() } and {@link #isControlCharacter() } are true.
+     * @return 
+     */
+    public boolean isNullCharacter() {
+        return isZero() && isControlCharacter();
     }
     
     /**

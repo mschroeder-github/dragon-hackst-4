@@ -51,6 +51,13 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                 content.setBytes(contentBytes);
                 content.setSizeUncompressed(contentBytes.length);
                 
+                //a small check
+                //int i = Verifier.compare(file.getOriginalContentBytes(), contentBytes);
+                //if(i != -1) {
+                //    String out = Inspector.splitScreen(Inspector.toHexDump(file.getOriginalContentBytes(), 25), 100, Inspector.toHexDump(contentBytes, 25));
+                //    System.out.println(out);
+                //}
+                
             } else {
                 //default case (as is)
                 content.setBytes(file.getOriginalContentBytes());

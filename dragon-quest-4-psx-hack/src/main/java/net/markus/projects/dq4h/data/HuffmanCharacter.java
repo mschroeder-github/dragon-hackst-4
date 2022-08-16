@@ -1,6 +1,8 @@
 
 package net.markus.projects.dq4h.data;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.markus.projects.dq4h.compare.ComparatorReport;
 import net.markus.projects.dq4h.compare.DragonQuestComparator;
 import net.markus.projects.dq4h.io.Verifier;
@@ -15,11 +17,15 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
     
     private String originalBits;
     private int originalBitPosition;
+    
+    private List<HuffmanCharacterReferrer> referrers;
 
     public HuffmanCharacter() {
+        referrers = new ArrayList<>();
     }
 
     public HuffmanCharacter(HuffmanNode node) {
+        this();
         this.node = node;
     }
 
@@ -52,6 +58,8 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
 
     /**
      * The original bit position where the character's bit code was read.
+     * It is 0-based, so does not have an offset.
+     * The first character has always the bit position 0.
      * @return 
      */
     public int getOriginalBitPosition() {
@@ -61,14 +69,17 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
     public void setOriginalBitPosition(int originalBitPosition) {
         this.originalBitPosition = originalBitPosition;
     }
+    
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("HuffmanCharacter{");
         sb.append("node=").append(node);
-        sb.append(", originalBitPosition=").append(originalBitPosition);
+        //sb.append(", originalShiftedBitPositionHex=").append(Inspector.toHex(getOriginalShiftedBitPositionAsBytes()));
         sb.append(", originalBits=").append(originalBits);
+        sb.append(", originalBitPosition=").append(originalBitPosition);
+        sb.append(", referrers=(").append(referrers.size()).append(")");
         sb.append('}');
         return sb.toString();
     }
@@ -92,5 +103,19 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
         
         //bits and bits position could have changed because tree changed
     }
+    
+    public void addRereferrer(HuffmanCharacterReferrer referrer) {
+        this.referrers.add(referrer);
+    }
+
+    public List<HuffmanCharacterReferrer> getReferrers() {
+        return referrers;
+    }
+    
+    public boolean hasReferrers() {
+        return !referrers.isEmpty();
+    }
+    
+    
     
 }

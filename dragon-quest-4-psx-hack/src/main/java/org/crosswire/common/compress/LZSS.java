@@ -798,4 +798,31 @@ public class LZSS extends AbstractCompressor {
         compressData = Arrays.copyOf(compressData, compressedSize);
         return compressData;
     }
+    
+    public static byte[] uncompress(InputStream compressedInput, int sizeUncompressed) throws IOException {
+        byte[] fileContentBytes = new LZSS(compressedInput).uncompress(sizeUncompressed).toByteArray();
+                
+        int expected = sizeUncompressed;
+        int actual = fileContentBytes.length;
+
+        //actual can be larger than expected
+        if(expected > actual) {
+            //note: this does not happen in DQ4 data
+            throw new IOException(
+                    String.format(
+                            "Uncompressed size expected > actual: expected: %d is greater than actual: %d",
+                            sizeUncompressed,
+                            fileContentBytes.length
+                    )
+            );
+        } else if(expected != actual) {
+            //if the decompression wrote too many bytes we shorten the result
+
+            //we shorten the byte array to the expected size
+            fileContentBytes = Arrays.copyOfRange(fileContentBytes, 0, expected);
+        }
+        
+        return fileContentBytes;
+    }
+    
 }

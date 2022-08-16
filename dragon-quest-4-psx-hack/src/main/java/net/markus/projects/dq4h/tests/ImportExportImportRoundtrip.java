@@ -3,11 +3,13 @@ package net.markus.projects.dq4h.tests;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import net.markus.projects.dq4h.compare.ComparatorReport;
 import net.markus.projects.dq4h.data.DragonQuestBinary;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.IOConfig;
+import net.markus.projects.dq4h.io.Verifier;
 import net.markus.projects.dq4h.util.MemoryUtility;
 
 /**
@@ -15,12 +17,15 @@ import net.markus.projects.dq4h.util.MemoryUtility;
  */
 public class ImportExportImportRoundtrip {
     
+    //needs around 5 GB because imported two times
     public void run() throws IOException {
         File folder = new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/");
         File inputFile = new File(folder, "dq4.bin");
         File outputFile = new File(folder, "dq4-patched.bin");
         
         IOConfig config = new IOConfig();
+        //config.getScriptContentTypes().clear();
+        //config.getTextContentTypes().clear();
         
         //import =============================
         System.out.println("Importing " + inputFile);
@@ -56,7 +61,15 @@ public class ImportExportImportRoundtrip {
             throw new RuntimeException("file length differ");
         }
         
+        begin = System.currentTimeMillis();
+        System.out.println("Comparing files");
+        List<Long> fileComparison = Verifier.filesCompareByByte(inputFile, outputFile);
+        end = System.currentTimeMillis();
+        System.out.println("Result (" + fileComparison.size() + " byte changes) took "+ (end-begin) +" ms at " + fileComparison);
+        
         //import =============================
+        
+        System.gc();
         
         System.out.println("Importing " + outputFile);
         
