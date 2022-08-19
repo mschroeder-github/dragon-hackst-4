@@ -10,6 +10,7 @@ import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.IOConfig;
 import net.markus.projects.dq4h.io.Verifier;
+import net.markus.projects.dq4h.translation.Translator;
 import net.markus.projects.dq4h.util.MemoryUtility;
 
 /**
@@ -24,10 +25,24 @@ public class ImportExportImportRoundtrip {
         File outputFile = new File(folder, "dq4-patched.bin");
         
         IOConfig config = new IOConfig();
-        //config.getScriptContentTypes().clear();
-        //config.getTextContentTypes().clear();
         
-        //import =============================
+        DragonQuestBinary originalBin = importData(inputFile, config);
+        
+        if(true) {
+            Translator translator = new Translator();
+            translator.setBinary(originalBin);
+            translator.selectiveTranslation("006c");
+        }
+        
+        exportData(originalBin, inputFile, outputFile, config);
+        
+        DragonQuestBinary patchedBin = importAgain(outputFile, config);
+        
+        compare(originalBin, patchedBin);
+    }
+    
+    private DragonQuestBinary importData(File inputFile, IOConfig config) throws IOException {
+         //import =============================
         System.out.println("Importing " + inputFile);
         
         long begin = System.currentTimeMillis();
@@ -40,11 +55,14 @@ public class ImportExportImportRoundtrip {
         
         System.out.println("took " + (end - begin) + " ms, " + MemoryUtility.memoryStatistics());
         
-        
+        return inputBin;
+    }
+    
+    private void exportData(DragonQuestBinary inputBin, File inputFile, File outputFile, IOConfig config) throws IOException {
         //export =============================
-        System.out.println("Exporting to " + outputFile);
+        System.out.println("Exporting " + outputFile);
         
-        begin = System.currentTimeMillis();
+        long begin = System.currentTimeMillis();
         
         DragonQuestBinaryFileWriter binWriter = new DragonQuestBinaryFileWriter(config);
         binWriter.patch(
@@ -53,7 +71,7 @@ public class ImportExportImportRoundtrip {
                 outputFile
         );
         
-        end = System.currentTimeMillis();
+        long end = System.currentTimeMillis();
         
         System.out.println("took " + (end - begin) + " ms, " + MemoryUtility.memoryStatistics());
         
@@ -61,29 +79,46 @@ public class ImportExportImportRoundtrip {
             throw new RuntimeException("file length differ");
         }
         
-        begin = System.currentTimeMillis();
-        System.out.println("Comparing files");
-        List<Long> fileComparison = Verifier.filesCompareByByte(inputFile, outputFile);
-        end = System.currentTimeMillis();
-        System.out.println("Result (" + fileComparison.size() + " byte changes) took "+ (end-begin) +" ms at " + fileComparison);
+        if(false) {
+            begin = System.currentTimeMillis();
+            System.out.println("Comparing files");
+            List<Long> fileComparison = Verifier.filesCompareByByte(inputFile, outputFile);
+            end = System.currentTimeMillis();
+            System.out.println("Result (" + fileComparison.size() + " byte changes) took "+ (end-begin) +" ms at " + fileComparison);
+        }
         
+        config.getChangeLogEntries().forEach(c -> System.out.println(c));
+        config.getChangeLogEntries().forEach(e -> {
+            try {
+                e.saveHtmlReport(new File("../../" + e.getFilename() + ".html"));
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
+    
+    private DragonQuestBinary importAgain(File outputFile, IOConfig config) throws IOException {
         //import =============================
         
         System.gc();
         
         System.out.println("Importing " + outputFile);
         
-        begin = System.currentTimeMillis();
+        long begin = System.currentTimeMillis();
         
         //reading the written file again
-        binReader = new DragonQuestBinaryFileReader(config);
-        DragonQuestBinary outputBin = binReader.read(inputFile);
+        DragonQuestBinaryFileReader binReader = new DragonQuestBinaryFileReader(config);
+        DragonQuestBinary outputBin = binReader.read(outputFile);
         System.out.println(outputBin);
         
-        end = System.currentTimeMillis();
+        long end = System.currentTimeMillis();
         
         System.out.println("took " + (end - begin) + " ms, " + MemoryUtility.memoryStatistics());
         
+        return outputBin;
+    }
+    
+    private void compare(DragonQuestBinary inputBin, DragonQuestBinary outputBin) {
         //compare =====================
         
         ComparatorReport report = new ComparatorReport();

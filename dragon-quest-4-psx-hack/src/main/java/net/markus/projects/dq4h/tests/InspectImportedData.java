@@ -95,7 +95,7 @@ public class InspectImportedData {
             
             for(HeartBeatDataTextContent text : folder.getContents(HeartBeatDataTextContent.class)) {
                 
-                for(VariableToDialogPointer vdp : text.getDialogPointers()) {
+                for(VariableToDialogPointer vdp : text.getOriginalDialogPointers()) {
                     if(vdp.hasReference()) {
                         vdpPositive++;
                     } else {

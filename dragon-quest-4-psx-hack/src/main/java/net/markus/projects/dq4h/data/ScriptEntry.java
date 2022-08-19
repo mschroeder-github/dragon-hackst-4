@@ -6,6 +6,14 @@ package net.markus.projects.dq4h.data;
  */
 public abstract class ScriptEntry {
 
-    
-    
+    private HeartBeatDataScriptContent parent;
+
+    public HeartBeatDataScriptContent getParent() {
+        return parent;
+    }
+
+    public void setParent(HeartBeatDataScriptContent parent) {
+        this.parent = parent;
+    }
+
 }

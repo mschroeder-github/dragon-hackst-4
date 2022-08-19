@@ -795,7 +795,9 @@ public class LZSS extends AbstractCompressor {
             throw new RuntimeException(ex);
         }
         byte[] compressData = compressBaos.toByteArray();
-        compressData = Arrays.copyOf(compressData, compressedSize);
+        if(compressedSize > 0) {
+            compressData = Arrays.copyOf(compressData, compressedSize);
+        }
         return compressData;
     }
     
@@ -825,4 +827,7 @@ public class LZSS extends AbstractCompressor {
         return fileContentBytes;
     }
     
+    public static byte[] uncompress(InputStream compressedInput) throws IOException {
+        return new LZSS(compressedInput).uncompress().toByteArray();
+    }
 }

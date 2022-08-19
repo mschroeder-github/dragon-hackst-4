@@ -11,6 +11,7 @@ import java.io.OutputStream;
 public class DragonQuestOutputStream {
 
     private OutputStream outputStream;
+    private int position;
 
     public DragonQuestOutputStream(OutputStream outputStream) {
         this.outputStream = outputStream;
@@ -18,10 +19,12 @@ public class DragonQuestOutputStream {
 
     public void write(byte[] b) throws IOException {
         outputStream.write(b);
+        position += b.length;
     }
 
     public void write(byte[] b, int off, int len) throws IOException {
         outputStream.write(b, off, len);
+        position += len;
     }
 
     public void flush() throws IOException {
@@ -65,5 +68,9 @@ public class DragonQuestOutputStream {
     public void writeBytesLE(byte[] bytes) throws IOException {
         write(Converter.reverse(bytes));
     }
-    
+
+    public int getPosition() {
+        return position;
+    }
+
 }

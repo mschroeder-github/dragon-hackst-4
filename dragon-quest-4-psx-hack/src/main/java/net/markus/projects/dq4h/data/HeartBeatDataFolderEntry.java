@@ -68,6 +68,24 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
         }
         return list;
     }
+    
+    /**
+     * Returns (possibly many) text contents by a given id (2 byte hex).
+     * @param textId two byte hex value, e.g. "006c"
+     * @return 
+     */
+    public List<HeartBeatDataTextContent> getTextContentById(String textId) {
+        List<HeartBeatDataTextContent> list = new ArrayList<>();
+        for(HeartBeatDataFile f : getFiles()) {
+            if(f.hasContent() && f.getContent() instanceof HeartBeatDataTextContent) {
+                HeartBeatDataTextContent textContent = (HeartBeatDataTextContent) f.getContent();
+                if(textContent.getIdHex().equals(textId)) {
+                    list.add(textContent);
+                }
+            }
+        }
+        return list;
+    }
 
     /**
      * The origial number of files in the data.

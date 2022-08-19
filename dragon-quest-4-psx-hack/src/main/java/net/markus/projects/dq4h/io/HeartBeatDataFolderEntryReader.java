@@ -167,7 +167,7 @@ public class HeartBeatDataFolderEntryReader extends DragonQuestReader<HeartBeatD
             }
             
             //check only if dialog pointers exist
-            if(text.getDialogPointers().isEmpty()) {
+            if(text.getOriginalDialogPointers().isEmpty()) {
                 continue;
             }
 
@@ -193,7 +193,7 @@ public class HeartBeatDataFolderEntryReader extends DragonQuestReader<HeartBeatD
             
             //reference source: dialog pointers
             Map<Integer, VariableToDialogPointer> bitPosition2vpd = new HashMap<>();
-            for (VariableToDialogPointer vpd : text.getDialogPointers()) {
+            for (VariableToDialogPointer vpd : text.getOriginalDialogPointers()) {
                 bitPosition2vpd.put(vpd.getBitOffsetAsInt(), vpd);
             }
 

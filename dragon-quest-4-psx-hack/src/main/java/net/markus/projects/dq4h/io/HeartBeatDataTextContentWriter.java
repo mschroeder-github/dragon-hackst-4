@@ -3,11 +3,7 @@ package net.markus.projects.dq4h.io;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.data.HuffmanCharacter;
 import net.markus.projects.dq4h.data.HuffmanNode;
@@ -21,42 +17,51 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
     @Override
     public void write(HeartBeatDataTextContent textContent, OutputStream output) throws IOException {
         
-        byte[] treeBytes;
-        byte[] textBytes;
-        short numberOfNodes;
+        //encode tree and text with tree
+        byte[] treeBytes = toHuffmanTreeBytes(textContent.getTree());
+        //System.out.println(Inspector.toHexDump(treeBytes, 8));
+        String writtenTreeStr = textContent.getTree().toStringTree();
         
-        //when we patch it
-        //we have to calculate tree and text
-        if(textContent.isPerformPatch()) {
-
-            //1. count how often a character occurs in the textContent.getText()
-            //we need a set of nodes where frequency is set
-            Set<HuffmanNode> nodes = toUniqueNodesWithFrequencies(textContent.getText());
-
-            //2. get the tree from nodes with frequency 
-            HuffmanNode tree = createHuffmanTree(nodes);
-            //System.out.println(tree.toStringTree());
-
-            //TODO we maybe have to make the tree artificially bigger to have more bytes
-            
-            //3. encode tree and text with tree
-            treeBytes = toHuffmanTreeBytes(tree);
-            textBytes = encodeText(textContent.getText(), tree);
-            
-            //just the nodes
-            //root has the highest number
-            //0 ... 5 = 6 nodes, thus + 1
-            numberOfNodes = (short) (tree.getID() + 1);
-            
-        } else {
-            
-            //the original content
-            treeBytes = textContent.getOriginalTreeBytes();
-            textBytes = textContent.getOriginalTextBytes();
-            numberOfNodes = textContent.getOriginalHuffmanTreeNumberOfNodes();
+        //better safe than sorry
+        HeartBeatDataTextContentReader reader = new HeartBeatDataTextContentReader();
+        HuffmanNode parsedTree = reader.parseTree(treeBytes);
+        String parsedTreeStr = parsedTree.toStringTree();
+        if(!writtenTreeStr.equals(parsedTreeStr)) {
+            throw new IOException("The written tree is not the parsed tree for " + textContent.getParent());
         }
         
-        //4. write it correctly
+        //encodeText uses the originalBits information in the HuffmanCharactersg
+        byte[] textBytes = encodeText(textContent.getText());
+        
+        //textContent.getText().forEach(c -> System.out.println(c));
+        
+        //maybe we just extend the text bytes by zeros until file size is reached
+        int treeBytesDiff = textContent.getOriginalTreeBytes().length - treeBytes.length;
+        int textBytesDiff = textContent.getOriginalTextBytes().length - textBytes.length;
+        
+        //this works
+        byte[] longerTextBytes = new byte[textBytes.length + treeBytesDiff + textBytesDiff];
+        System.arraycopy(textBytes, 0, longerTextBytes, 0, textBytes.length);
+        textBytes = longerTextBytes;
+        
+        //better safe than sorry
+        List<HuffmanCharacter> parsedText = reader.decodeText(textBytes, parsedTree);
+        String writtenTextStr = HuffmanCharacter.listToString(textContent.getText());
+        String parsedTextStr = HuffmanCharacter.listToString(parsedText);
+        if(!writtenTextStr.equals(parsedTextStr)) {
+            throw new IOException("The written text is not the parsed text for " + textContent.getParent());
+        }
+        
+        //just the nodes
+        //root has the highest number
+        //0 ... 5 = 6 nodes, root has ID 6 so no +1 necessary
+        short numberOfNodes = (short) textContent.getTree().getID(); //(short) (textContent.getTree().getID() + 1);
+        
+        if(parsedTree.descendantsBranch().size() != numberOfNodes) {
+            throw new IOException("numberOfNodes and actual number of nodes in tree differ");
+        }
+        
+        //write it correctly
         int end = 
                 4 * 6 + //header
                 textContent.getOriginalUnknown2().length + 
@@ -107,90 +112,34 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         
         dqos.writeIntLE(end);
         
-        if(textContent.isPerformPatch()) {
-            dqos.writeIntLE(textContent.getDialogPointers().size());
-            for(VariableToDialogPointer kvp : textContent.getDialogPointers()) {
-                dqos.writeBytesLE(kvp.getVariable());
-                dqos.writeBytesLE(kvp.getValue());
-            }
-            
-        } else {
-            dqos.writeIntLE(textContent.getOriginalDialogPointers().size());
-            for(VariableToDialogPointer kvp : textContent.getOriginalDialogPointers()) {
-                dqos.writeBytesLE(kvp.getVariable());
-                dqos.writeBytesLE(kvp.getValue());
-            }
+        //the original one can be changed by the above patch because they are referrers
+        dqos.writeIntLE(textContent.getOriginalDialogPointers().size());
+        for(VariableToDialogPointer kvp : textContent.getOriginalDialogPointers()) {
+            dqos.writeBytesLE(kvp.getVariable());
+            dqos.writeBytesLE(kvp.getValue());
         }
         
+        //fill with zeros until we reach the original file size
+        //hopefully this will work and not break the game
+        int originalFileSize = textContent.getParent().getOriginalContentBytes().length;
+        
+        if(dqos.getPosition() > originalFileSize) {
+            throw new IOException("The new file size is larger than the original file size");
+        }
+        
+        while(dqos.getPosition() < originalFileSize) {
+            dqos.write(new byte[] { 0 });
+        }
     }
     
     //tree =========================
     
-    private Set<HuffmanNode> toUniqueNodesWithFrequencies(List<HuffmanCharacter> text) {
-        Map<HuffmanNode, HuffmanNode> nodeMap = new HashMap<>();
-        for(HuffmanCharacter c : text) {
-            HuffmanNode n = nodeMap.get(c.getNode());
-            if(n == null) {
-                n = c.getNode();
-                nodeMap.put(n, n);
-                n.setFrequency(1);
-            } else {
-                n.setFrequency(n.getFrequency() + 1);
-            }
-        }
-        return nodeMap.keySet();
-    }
-    
-    /**
-     * From a set of nodes with their frequencies this method builds a huffman tree.
-     * @param nodesWithFrequencies
-     * @return 
-     */
-    private HuffmanNode createHuffmanTree(Set<HuffmanNode> nodesWithFrequencies) {
-        
-        //to list to sort them by frequency
-        List<HuffmanNode> list = new ArrayList<>(nodesWithFrequencies);
-        
-        //parsed trees have a 'HuffmanNode{type=Branch, content=0}' so start at 0
-        //highest id has the root
-        short nodeID = 0;
-        
-        while(list.size() > 1) {
-            
-            //lowest frequency first
-            //if frequency is equal, maybe the original tree used the content has sorting
-            list.sort((a,b) -> { 
-                int cmp = Double.compare(a.getFrequency(), b.getFrequency());
-                if(cmp == 0) {
-                    //unclear what original algo did
-                    return a.getContentHex().compareToIgnoreCase(b.getContentHex());
-                }
-                return cmp;
-            });
-            
-            //remove from list the two lowerst
-            HuffmanNode a = list.remove(0);
-            HuffmanNode b = list.remove(0);
-            
-            //create a parent node for them
-            HuffmanNode node = new HuffmanNode(nodeID++);
-            //use first a then b, so the branch ids are correct
-            node.getChildren().add(a);
-            node.getChildren().add(b);
-            //accumulate frequency: has to be sum
-            node.setFrequency(a.getFrequency() + b.getFrequency());
-            
-            //add to list again
-            list.add(node);
-        }
-        
-        return list.get(0);
-    }
     
     private byte[] toHuffmanTreeBytes(HuffmanNode root) {
         List<HuffmanNode> nodes = root.descendants();
         
-        int arraySize = nodes.size() * 2 + 2; //+2 because 0000
+        //root is not stored
+        int arraySize = (nodes.size() * 2) + 2; //because the array ends with 0x0000 (but the root number is not stored)
         byte[] data = new byte[arraySize];
         
         toHuffmanTreeBytesRecursiveStep(root, data);
@@ -203,6 +152,7 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         int offsetA = 0;
         //to get the second tree part
         int offsetB = (int) ((data.length + 2) / 2) - 2;
+        //int offsetB = (int) (data.length / 2);
         
         int number = node.getID();
         
@@ -212,8 +162,16 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
             HuffmanNode child = node.getChildren().get(i);
             boolean isLeft = i == 0;
             
+            //root is 183
+            //first child has the lower number, e.g. 181 
+            //second child has the higher number, e.g. 182
+            
+            //second child needs to be at end of array because largest number is expected at end of array
+            
             //based on which side use right offset for index calculation
-            int index = (isLeft ? offsetB : offsetA) + number * 2;
+            int index = (isLeft ? offsetA : offsetB) + number * 2;
+            
+            //System.out.println(child + " at index " + index + ", isLeft: " + isLeft);
             
             byte[] nodeAsBytes = nodeToByteArray(child);
             
@@ -242,9 +200,12 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
             
         } else if(node.isCharacter()) {
             
-            //swap and second byte - 0x80 to make it a character
+            //0293 => original but swapped value
+            //System.out.println(Inspector.toHex(node.getContent()));
+            
+            //just swap it
             data[0] = node.getContent()[1];
-            data[1] = (byte) (node.getContent()[0] - 0x80);
+            data[1] = node.getContent()[0];
             
         } else if(node.isControlCharacter()) {
             
@@ -259,14 +220,16 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
     
     //text =========================
     
-    private byte[] encodeText(List<HuffmanCharacter> text, HuffmanNode root) throws IOException {
+    private byte[] encodeText(List<HuffmanCharacter> text) throws IOException {
         
-        Map<HuffmanNode, String> char2str = getCharacterToBitsMap(root);
+        //Map<HuffmanNode, String> char2str = getCharacterToBitsMap(root);
         
         StringBuilder bitsSB = new StringBuilder();
         for(HuffmanCharacter hc : text) {
             //this works because HuffmanNode has an implemented equals method
-            String bits = char2str.get(hc.getNode());
+            //String bits = char2str.get(hc.getNode());
+            
+            String bits = hc.getOriginalBits();
             
             if(bits == null) {
                 throw new IOException("could not find bit sequence for " + hc + " at index " + text.indexOf(hc));
@@ -304,28 +267,5 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         return data;
     }
     
-    /**
-     * Based on the huffman tree create for each (control) character node the corresponding bit code.
-     * @param huffmanTreeRoot
-     * @return 
-     */
-    private Map<HuffmanNode, String> getCharacterToBitsMap(HuffmanNode huffmanTreeRoot) {
-        Map<HuffmanNode, String> map = new HashMap<>();
-        
-        getCharacterToBitsMapRecursive("0", huffmanTreeRoot.getLeftChild(), map);
-        getCharacterToBitsMapRecursive("1", huffmanTreeRoot.getRightChild(), map);
-        
-        return map;
-    }
-    
-    private void getCharacterToBitsMapRecursive(String bits, HuffmanNode parent, Map<HuffmanNode, String> map) {
-        if(parent.isLeaf()) {
-            map.put(parent, bits);
-            
-        } else if(parent.isBranch()) {
-            getCharacterToBitsMapRecursive(bits + "0", parent.getLeftChild(), map);
-            getCharacterToBitsMapRecursive(bits + "1", parent.getRightChild(), map);
-        }
-    }
 
 }

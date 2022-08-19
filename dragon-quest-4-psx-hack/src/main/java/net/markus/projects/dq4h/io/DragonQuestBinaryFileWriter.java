@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import net.markus.projects.dq4h.data.DragonQuestBinary;
 import org.apache.commons.io.FileUtils;
 
@@ -76,6 +77,14 @@ public class DragonQuestBinaryFileWriter  {
         */
         
         out.close();
+        
+        //CUE file
+        File cueFile = new File(output.getParentFile(), output.getName().replace(".bin", ".cue"));
+        StringBuilder cue = new StringBuilder();
+        cue.append("FILE \"").append(output.getName()).append("\" BINARY\n");
+        cue.append("  TRACK 01 MODE2/2352\n");
+        cue.append("    INDEX 01 00:00:00");
+        FileUtils.writeStringToFile(cueFile, cue.toString(), StandardCharsets.UTF_8);
     }
     
     private void writeToSectors(byte[] data, int startSector, RandomAccessFile out) throws IOException {

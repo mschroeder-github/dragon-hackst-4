@@ -1,4 +1,3 @@
-
 package net.markus.projects.dq4h.data;
 
 import java.util.ArrayList;
@@ -20,23 +19,29 @@ public class HuffmanNode {
         ControlCharacter,
         Character
     }
-    
+
     private Type type;
     private byte[] content;
-    
+
     private List<HuffmanNode> children;
-    
+
     private double frequency;
-    
+
+    /**
+     * Creates a typed node with content. Put the content in little endian, e.g. 0x7f**.
+     *
+     * @param type
+     * @param content
+     */
     public HuffmanNode(Type type, byte[] content) {
         this.type = type;
         this.content = content;
         this.children = new ArrayList<>();
     }
-    
+
     /**
-     * Creates a {@link Type#Branch} node with the given id.
-     * Uses {@link #setID(int) }.
+     * Creates a {@link Type#Branch} node with the given id. Uses {@link #setID(int) }.
+     *
      * @param id unique number for the branch node
      */
     public HuffmanNode(short id) {
@@ -46,8 +51,28 @@ public class HuffmanNode {
     }
 
     /**
+     * Creates a {@link Type#Character} node with the given japanese character.
+     *
+     * @param asciiChar
+     */
+    public HuffmanNode(char asciiChar) {
+        this.type = Type.Character;
+
+        byte[] bytes = ShiftJIS.getBytes(ShiftJIS.getJapaneseVersion(asciiChar));
+        if (bytes == null) {
+            throw new RuntimeException("No binary representation found for " + asciiChar);
+        }
+
+        bytes[0] -= (byte) 0x80;
+
+        this.content = bytes;
+        this.children = new ArrayList<>();
+    }
+
+    /**
      * The node can be a branch (having two children), a control character (like new line) or a character (letter or symbol).
-     * @return 
+     *
+     * @return
      */
     public Type getType() {
         return type;
@@ -60,55 +85,56 @@ public class HuffmanNode {
     public boolean isBranch() {
         return type == Type.Branch;
     }
-    
+
     public boolean isControlCharacter() {
         return type == Type.ControlCharacter;
     }
-    
+
     public boolean isCharacter() {
         return type == Type.Character;
     }
-    
+
     /**
      * The node is a leaf if it is a (control) character.
-     * @return 
+     *
+     * @return
      */
     public boolean isLeaf() {
         return isControlCharacter() || isCharacter();
     }
-    
+
     /**
      * Returns true if the content is {0000}.
-     * @return 
+     *
+     * @return
      */
     public boolean isZero() {
         return Verifier.allZero(content);
     }
-    
+
     /**
-     * Checks if it is '\0' which is the case
-     * when {@link #isZero() } and {@link #isControlCharacter() } are true.
-     * @return 
+     * Checks if it is '\0' which is the case when {@link #isZero() } and {@link #isControlCharacter() } are true.
+     *
+     * @return
      */
     public boolean isNullCharacter() {
         return isZero() && isControlCharacter();
     }
-    
+
     /**
-     * The content of a node is always two bytes long.
-     * It is already swapped, so it is e.g. {7f**} for a control character and {80**} for a japanese character.
-     * It has to start with 0x80, later the writer will swap it.
-     * If {@link Type#Branch} it is the id, if {@link Type#ControlCharacter} or {@link Type#Character} it is
-     * the character.
-     * @return 
+     * The content of a node is always two bytes long. It is already swapped, so it is e.g. {7f**} for a control character and {80**} for a japanese character. But it is the original data so japanese
+     * character has e.g. 0x0293 instead of 0x8293. If {@link Type#Branch} it is the id, if {@link Type#ControlCharacter} or {@link Type#Character} it is the character.
+     *
+     * @return
      */
     public byte[] getContent() {
         return content;
     }
-    
+
     /**
      * The hex representation of {@link #getContent() }.
-     * @return 
+     *
+     * @return
      */
     public String getContentHex() {
         return Inspector.toHex(content);
@@ -121,19 +147,20 @@ public class HuffmanNode {
     public List<HuffmanNode> getChildren() {
         return children;
     }
-    
+
     /**
      * If this node is a {@link Type#Branch} then this method returns the node's ID number.
-     * @return 
+     *
+     * @return
      */
     public short getID() {
         return (short) (Converter.bytesToIntBE(new byte[]{0, 0, content[0], content[1]}) - 0x8000);
     }
-    
+
     /**
-     * If this node is a {@link Type#Branch} then this method sets the node's ID number.
-     * This will update the {@link #getContent() } of the node.
-     * @param id 
+     * If this node is a {@link Type#Branch} then this method sets the node's ID number. This will update the {@link #getContent() } of the node.
+     *
+     * @param id
      */
     public final void setID(short id) {
         content = Converter.shortToBytesBE(id);
@@ -143,25 +170,28 @@ public class HuffmanNode {
 
     /**
      * Gets the japanese character representation using {@link ShiftJIS}.
-     * @return 
+     *
+     * @return
      */
     public Character getCharacter() {
         byte[] copy = new byte[]{content[0], content[1]};
         copy[0] = (byte) (copy[0] + (byte) 0x80);
         return ShiftJIS.getCharacter(copy);
     }
-    
+
     /**
      * For a {@link Type#Branch} node, returns the first child.
-     * @return 
+     *
+     * @return
      */
     public HuffmanNode getLeftChild() {
         return children.get(0);
     }
-    
+
     /**
      * For a {@link Type#Branch} node, returns the second child.
-     * @return 
+     *
+     * @return
      */
     public HuffmanNode getRightChild() {
         return children.get(1);
@@ -169,22 +199,23 @@ public class HuffmanNode {
 
     /**
      * The frequency of a (control) character is used when the tree is built.
-     * @return 
+     *
+     * @return
      */
     public double getFrequency() {
         return frequency;
     }
-    
+
     public void setFrequency(double frequency) {
         this.frequency = frequency;
     }
-    
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("HuffmanNode{");
         sb.append("type=").append(type);
-        switch(type) {
+        switch (type) {
             case Branch:
                 sb.append(", content=").append(getID());
                 break;
@@ -195,11 +226,11 @@ public class HuffmanNode {
                 sb.append(", content=").append(getCharacter());
                 break;
         }
-        
+
         sb.append('}');
         return sb.toString();
     }
-    
+
     public String toStringTree() {
         StringBuilder sb = new StringBuilder();
         toStringTree("", true, sb);
@@ -213,7 +244,7 @@ public class HuffmanNode {
         }
         if (children.size() > 0) {
             children.get(children.size() - 1)
-                    .toStringTree(prefix + (isTail ?"    " : "│   "), true, sb);
+                    .toStringTree(prefix + (isTail ? "    " : "│   "), true, sb);
         }
     }
 
@@ -227,8 +258,9 @@ public class HuffmanNode {
 
     /**
      * Node are equal if they have the same type and byte content.
+     *
      * @param obj
-     * @return 
+     * @return
      */
     @Override
     public boolean equals(Object obj) {
@@ -247,23 +279,34 @@ public class HuffmanNode {
         }
         return Arrays.equals(this.content, other.content);
     }
-    
-    
+
     /**
      * Returns a list of all descendants (excluding this node).
-     * @return 
+     *
+     * @return
      */
     public List<HuffmanNode> descendants() {
         List<HuffmanNode> l = new ArrayList<>();
-        for(HuffmanNode child : getChildren()) {
+        for (HuffmanNode child : getChildren()) {
             l.add(child);
         }
-        if(isBranch()) {
-            for(HuffmanNode child : getChildren()) {
+        if (isBranch()) {
+            for (HuffmanNode child : getChildren()) {
                 l.addAll(child.descendants());
             }
         }
         return l;
     }
-    
+
+    /**
+     * Returns a list of all descendant branches (excluding this node).
+     *
+     * @return
+     */
+    public List<HuffmanNode> descendantsBranch() {
+        List<HuffmanNode> l = descendants();
+        l.removeIf(n -> !n.isBranch());
+        return l;
+    }
+
 }

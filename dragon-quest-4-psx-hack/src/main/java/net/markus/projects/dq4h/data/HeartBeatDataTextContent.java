@@ -45,13 +45,10 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     
     //the content which can be changed
     
-    private boolean performPatch;
     private HuffmanNode tree;
     private List<HuffmanCharacter> text;
-    private List<VariableToDialogPointer> dialogPointers;
 
     public HeartBeatDataTextContent() {
-        this.dialogPointers = new ArrayList<>();
         this.originalDialogPointers = new ArrayList<>();
     }
 
@@ -245,14 +242,6 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     
     
     //main content ==============
-
-    public boolean isPerformPatch() {
-        return performPatch;
-    }
-
-    public void setPerformPatch(boolean performPatch) {
-        this.performPatch = performPatch;
-    }
     
     public HuffmanNode getTree() {
         return tree;
@@ -264,17 +253,25 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     
     /**
      * Calculates the characters which are the start of a sentence.
-     * We use the {0000} control character as indicator that after this strings
-     * starts another string.
      * The result is based on {@link #getOriginalText() }.
-     * We remove the last one if it does not end with a {0000}.
-     * @return 
+     * See {@link #getStartCharacters(java.util.List)}.
+     * @return
      */
     public List<HuffmanCharacter> getOriginalStartCharacters() {
+        return getStartCharacters(originalText);
+    }
+    
+    /**
+     * Calculates the characters which are the start of a sentence.
+     * We use the {0000} control character as indicator that after this strings starts another string.
+     * @param givenText
+     * @return 
+     */
+    public static List<HuffmanCharacter> getStartCharacters(List<HuffmanCharacter> givenText) {
         List<HuffmanCharacter> startChars = new ArrayList<>();
         
         boolean pick = true;
-        for(HuffmanCharacter c : getOriginalText()) {
+        for(HuffmanCharacter c : givenText) {
             if(pick) {
                 startChars.add(c);
                 pick = false;
@@ -286,6 +283,7 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
             }
         }
         
+        /*
         HuffmanCharacter lastOne = getOriginalText().get(getOriginalText().size() - 1);
         //if the last one is not {0000}
         if(!(lastOne.getNode().isControlCharacter() && lastOne.getNode().isZero())) {
@@ -295,6 +293,7 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
         
         //remove all {0000}, they cannot be starting characters. this happens in the dummy texts
         startChars.removeIf(c -> c.getNode().isControlCharacter() && lastOne.getNode().isZero());
+        */
         
         return startChars;
     }
@@ -306,39 +305,17 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
     public void setText(List<HuffmanCharacter> text) {
         this.text = text;
     }
-
-    public List<VariableToDialogPointer> getDialogPointers() {
-        return dialogPointers;
-    }
-
-    public void setDialogPointers(List<VariableToDialogPointer> dialogPointers) {
-        this.dialogPointers = dialogPointers;
-    }
     
     //to string ==================
     
     public String getTextAsString() {
-        if(text == null)
-            return "";
-        StringBuilder sb = new StringBuilder();
-        for(HuffmanCharacter c : text) {
-            sb.append(c.asString());
-        }
-        return sb.toString();
+        return HuffmanCharacter.listToString(text);
     }
 
     public String getTreeAsString() {
         if(tree == null)
             return "";
         return tree.toStringTree();
-    }
-
-    public String getDialogPointersAsString() {
-        StringBuilder sb = new StringBuilder();
-        for(VariableToDialogPointer kvp : dialogPointers) {
-            sb.append(kvp.toString()).append("\n");
-        }
-        return sb.toString().trim();
     }
     
     @Override

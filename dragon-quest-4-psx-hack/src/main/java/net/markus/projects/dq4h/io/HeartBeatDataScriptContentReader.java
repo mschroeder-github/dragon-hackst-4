@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import net.markus.projects.dq4h.data.HeartBeatDataScriptContent;
 import net.markus.projects.dq4h.data.ScriptBinaryEntry;
+import net.markus.projects.dq4h.data.ScriptEntry;
 import net.markus.projects.dq4h.data.ScriptNopEntry;
 import net.markus.projects.dq4h.data.ScriptSectionEntry;
 import net.markus.projects.dq4h.data.ScriptSeparatorEntry;
@@ -120,6 +121,11 @@ public class HeartBeatDataScriptContentReader extends DragonQuestReader<HeartBea
                 //default
                 script.getEntries().add(new ScriptBinaryEntry(cmd, params));
             }
+        }
+        
+        //set parent
+        for(ScriptEntry entry : script.getEntries()) {
+            entry.setParent(script);
         }
         
         //System.out.println("dqis.getPosition(): " + dqis.getPosition());

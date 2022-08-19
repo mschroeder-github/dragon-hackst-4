@@ -69,17 +69,20 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
     public void setOriginalBitPosition(int originalBitPosition) {
         this.originalBitPosition = originalBitPosition;
     }
-    
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("HuffmanCharacter{");
         sb.append("node=").append(node);
-        //sb.append(", originalShiftedBitPositionHex=").append(Inspector.toHex(getOriginalShiftedBitPositionAsBytes()));
-        sb.append(", originalBits=").append(originalBits);
+        if(originalBits != null)
+            sb.append(", originalBits=").append(originalBits);
         sb.append(", originalBitPosition=").append(originalBitPosition);
-        sb.append(", referrers=(").append(referrers.size()).append(")");
+        sb.append(", originalBytePosition=").append((int) Math.ceil(originalBitPosition / 8));
+        sb.append(", originalBitInBytePosition=").append(originalBitPosition % 8);
+        if(!referrers.isEmpty()) {
+            sb.append(", referrers=(").append(referrers.size()).append(")");
+        }
         sb.append('}');
         return sb.toString();
     }
@@ -108,6 +111,10 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
         this.referrers.add(referrer);
     }
 
+    public void setReferrers(List<HuffmanCharacterReferrer> referrers) {
+        this.referrers = referrers;
+    }
+    
     public List<HuffmanCharacterReferrer> getReferrers() {
         return referrers;
     }
@@ -117,5 +124,13 @@ public class HuffmanCharacter implements DragonQuestComparator<HuffmanCharacter>
     }
     
     
-    
+    public static String listToString(List<HuffmanCharacter> text) {
+        if(text == null)
+            return "";
+        StringBuilder sb = new StringBuilder();
+        for(HuffmanCharacter c : text) {
+            sb.append(c.asString());
+        }
+        return sb.toString();
+    }
 }

@@ -10,7 +10,10 @@ import net.markus.projects.dq4h.io.Inspector;
  */
 public class ScriptStoreEntry extends ScriptEntry implements HuffmanCharacterReferrer {
 
-    public static final byte[] store = new byte[] { (byte) 0xc0, (byte) 0x21, (byte) 0xa0 };
+    /**
+     * The command: 0xc021a0
+     */
+    public static final byte[] STORE = new byte[] { (byte) 0xc0, (byte) 0x21, (byte) 0xa0 };
     
     private byte[] params;
     
@@ -22,6 +25,7 @@ public class ScriptStoreEntry extends ScriptEntry implements HuffmanCharacterRef
 
     /**
      * Can be a dialog pointer, e.g. when reversed 0x06c00f91.
+     * The params are not stored in reversed order.
      * @return 
      */
     public byte[] getParams() {
@@ -59,6 +63,26 @@ public class ScriptStoreEntry extends ScriptEntry implements HuffmanCharacterRef
     public int getBitOffsetAsInt() {
         byte[] bitOffset = getBitOffset();
         return Converter.bytesToIntBE(new byte[] {0x00, bitOffset[0], bitOffset[1], bitOffset[2]});
+    }
+    
+    /**
+     * Sets the bit offset given as an int.
+     * This updates the {@link #getParams() } byte array and reuses
+     * the {@link #getTextId() }.
+     * @param bitOffset 
+     */
+    public void updatesBitOffsetAsInt(int bitOffset) {
+        //hex
+        //123 45678
+        //tex offset
+        
+        String texPart = Inspector.toHex(getTextId()).substring(1, 4);
+        String offsetPart = Inspector.toHex(Converter.intToBytesBE(bitOffset)).substring(3, 8);
+        
+        String hex = texPart + offsetPart;
+        byte[] bytes = Inspector.toBytes(hex);
+        
+        this.params = Converter.reverse(bytes);
     }
     
     public byte[] getBitOffset() {

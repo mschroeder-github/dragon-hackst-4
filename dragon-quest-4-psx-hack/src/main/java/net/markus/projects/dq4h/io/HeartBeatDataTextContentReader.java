@@ -72,6 +72,26 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         
         HuffmanNode originalTree = parseTree(treeBytes);
         
+        //all nodes without the root node, e.g. from 0 ... 182 -> 183 nodes
+        //the root node (here originalTree) has ID 183
+        List<HuffmanNode> descBranches = originalTree.descendantsBranch();
+        
+        
+        List<HuffmanNode> descs = originalTree.descendants();
+        
+        boolean descBranchesMatch = descBranches.size() == textContent.getOriginalHuffmanTreeNumberOfNodes();
+        //some also have this number stored
+        boolean descsMatch = descs.size() == textContent.getOriginalHuffmanTreeNumberOfNodes();
+        
+        if(!descBranchesMatch && !descsMatch) {
+            throw new IOException("number of tree nodes is not correct:"
+                    + "\ndescBranches.size() = " + descBranches.size() + 
+                      "\ntextContent.getOriginalHuffmanTreeNumberOfNodes() = " + textContent.getOriginalHuffmanTreeNumberOfNodes()
+                    + "\n" + originalTree.toStringTree()
+                    + "\n" + Inspector.toHexDump(treeBytes, 24)
+            );
+        }
+        
         //get the characters
         List<HuffmanCharacter> originalText = decodeText(textBytes, originalTree);
         
@@ -82,14 +102,9 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         textContent.setOriginalNumberOfPointers(dqis.readIntLE());
         for(int i = 0; i < textContent.getOriginalNumberOfPointers(); i++) {
             VariableToDialogPointer vdp = new VariableToDialogPointer();
+            vdp.setParent(textContent);
             vdp.setVariable(dqis.readBytesLE(4));
             vdp.setValue(dqis.readBytesLE(4));
-            textContent.getDialogPointers().add(vdp);
-            
-            //a copy to keep the original
-            VariableToDialogPointer vdpCopy = new VariableToDialogPointer();
-            vdpCopy.setVariable(vdp.getVariable());
-            vdpCopy.setValue(vdp.getValue());
             textContent.getOriginalDialogPointers().add(vdp);
         }
         
@@ -101,7 +116,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         //textContent.getText().forEach(c -> System.out.println(c));
                 
         //they always point to the correct text id
-        for(VariableToDialogPointer vdp : textContent.getDialogPointers()) {
+        for(VariableToDialogPointer vdp : textContent.getOriginalDialogPointers()) {
             if(!Arrays.equals(vdp.getTextId(), textContent.getId2Bytes())) {
                 throw new IOException("Dialog pointer points to another text id then its own: " + vdp + " " + textContent);
             }
@@ -110,7 +125,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         return textContent;
     }
 
-    private HuffmanNode parseTree(byte[] huffmanTreeBytes) {
+    public HuffmanNode parseTree(byte[] huffmanTreeBytes) {
         
         int lastNodeIndex = huffmanTreeBytes.length - 4;
         byte[] lastNode2Bytes = Arrays.copyOfRange(huffmanTreeBytes, lastNodeIndex, lastNodeIndex + 2);
@@ -190,7 +205,7 @@ public class HeartBeatDataTextContentReader extends DragonQuestReader<HeartBeatD
         return sb.toString();
     }
     
-    private List<HuffmanCharacter> decodeText(byte[] textBytes, HuffmanNode huffmanTreeRoot) {
+    public List<HuffmanCharacter> decodeText(byte[] textBytes, HuffmanNode huffmanTreeRoot) {
         List<HuffmanCharacter> text = new ArrayList();
         
         StringBuilder sb = new StringBuilder();

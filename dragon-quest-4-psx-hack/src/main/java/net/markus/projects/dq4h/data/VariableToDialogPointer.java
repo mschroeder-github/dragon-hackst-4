@@ -14,6 +14,8 @@ public class VariableToDialogPointer implements HuffmanCharacterReferrer {
     private byte[] value;
     
     private HuffmanCharacter referredCharacter;
+    
+    private HeartBeatDataTextContent parent;
 
     public VariableToDialogPointer() {
     }
@@ -59,6 +61,26 @@ public class VariableToDialogPointer implements HuffmanCharacterReferrer {
         return Converter.bytesToIntBE(new byte[] {0x00, bitOffset[0], bitOffset[1], bitOffset[2]});
     }
     
+    /**
+     * Sets the bit offset given as an int.
+     * This updates the {@link #getValue() () } byte array and reuses
+     * the {@link #getTextId() }.
+     * @param bitOffset 
+     */
+    public void updatesBitOffsetAsInt(int bitOffset) {
+        //hex
+        //123 45678
+        //tex offset
+        
+        String texPart = Inspector.toHex(getTextId()).substring(1, 4);
+        String offsetPart = Inspector.toHex(Converter.intToBytesBE(bitOffset)).substring(3, 8);
+        
+        String hex = texPart + offsetPart;
+        byte[] bytes = Inspector.toBytes(hex);
+        
+        this.value = Converter.reverse(bytes);
+    }
+    
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -86,6 +108,14 @@ public class VariableToDialogPointer implements HuffmanCharacterReferrer {
     @Override
     public boolean hasReference() {
         return referredCharacter != null;
+    }
+
+    public HeartBeatDataTextContent getParent() {
+        return parent;
+    }
+
+    public void setParent(HeartBeatDataTextContent parent) {
+        this.parent = parent;
     }
     
 }
