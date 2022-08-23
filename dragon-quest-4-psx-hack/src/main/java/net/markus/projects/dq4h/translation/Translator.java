@@ -1,27 +1,37 @@
 package net.markus.projects.dq4h.translation;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.markus.projects.dq4h.data.DragonQuestBinary;
+import net.markus.projects.dq4h.data.HeartBeatDataFile;
 import net.markus.projects.dq4h.data.HeartBeatDataFileContent;
 import net.markus.projects.dq4h.data.HeartBeatDataFolderEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataScriptContent;
 import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.data.HuffmanCharacter;
 import net.markus.projects.dq4h.data.HuffmanCharacterReferrer;
 import net.markus.projects.dq4h.data.HuffmanNode;
 import net.markus.projects.dq4h.data.ScriptStoreEntry;
 import net.markus.projects.dq4h.data.VariableToDialogPointer;
+import net.markus.projects.dq4h.io.Converter;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.HeartBeatDataTextContentWriter;
 import net.markus.projects.dq4h.io.IOConfig;
+import net.markus.projects.dq4h.io.Inspector;
 import net.markus.projects.dq4h.io.ShiftJIS;
 import net.markus.projects.dq4h.util.MemoryUtility;
+import org.apache.commons.io.FileUtils;
+import org.crosswire.common.compress.LZSS;
 
 /**
  * The main class doing the translation or patching.
@@ -41,8 +51,16 @@ public class Translator {
         Translator translator = new Translator(inputFile, outputFile);
 
         translator.importData();
+        
+        //translator.checkTextSequences();
 
+        //in cellar
         translator.selectiveTranslation("006c");
+        //town outside
+        //translator.selectiveTranslation("0067");
+        
+        //one with special store
+        //translator.selectiveTranslation("022f");
 
         translator.exportData();
     }
@@ -55,6 +73,8 @@ public class Translator {
         this.outputFile = outputFile;
     }
 
+    //I/O -------------
+    
     public void setBinary(DragonQuestBinary binary) {
         this.binary = binary;
     }
@@ -101,16 +121,195 @@ public class Translator {
             throw new RuntimeException("file length differ");
         }
 
-        config.getChangeLogEntries().forEach(e -> System.out.println(e));
+        File reportFolder = new File("../../patch-report");
+        reportFolder.mkdirs();
+        for(File f : reportFolder.listFiles()) {
+            f.delete();
+        }
+        
         config.getChangeLogEntries().forEach(e -> {
+            System.out.println(e);
             try {
-                e.saveHtmlReport(new File("../../" + e.getFilename() + ".html"));
+                e.saveHtmlReport(new File(reportFolder, e.getFilename() + ".html"));
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
         });
     }
 
+    //-----------------------
+    
+    public void checkTextSequences() throws IOException {
+        
+        File reportFolder = new File("../../missing-ref-report");
+        reportFolder.mkdirs();
+        
+        for(File f : reportFolder.listFiles()) {
+            f.delete();
+        }
+        
+        int numberOfSequences = 0;
+        int numberOfDummySequences = 0;
+        int numberOfMissingRefSequences = 0;
+        int numberOfAnyRefSequences = 0;
+        
+        Set<String> textIdsWithMissingRef = new HashSet<>();
+        Set<String> textIdsWithAllRef = new HashSet<>();
+        
+        for (HeartBeatDataFolderEntry folder : binary.getHeartBeatData().getFolders()) {
+            
+            for(HeartBeatDataTextContent textContent : folder.getContents(HeartBeatDataTextContent.class)) {
+                
+                List<List<HuffmanCharacter>> sequences = textContent.getOriginalSequences();
+                
+                //we assume that all refs are there
+                boolean allSeqHasRef = true;
+                        
+                List<HuffmanCharacter> noRefs = new ArrayList<>();
+                
+                for(List<HuffmanCharacter> seq : sequences) {
+                    numberOfSequences++;
+                    
+                    String str = HuffmanCharacter.listToString(seq);
+                    
+                    //every sequence ends with {0000}
+                    if(!seq.get(seq.size()-1).getNode().isNullCharacter()) {
+                        throw new RuntimeException("No \\0 character in " + sequences.indexOf(seq) + " sequence in " + textContent + ": " + HuffmanCharacter.listToString(seq));
+                    }
+                    
+                    boolean isDummy = str.startsWith("ダミー");
+                    if(isDummy) {
+                        numberOfDummySequences++;
+                    }
+                    
+                    //first has referrers
+                    boolean hasRef = seq.get(0).hasReferrers();
+                    
+                    //note: does not happen
+                    if(isDummy && hasRef) {
+                        throw new RuntimeException("a dummy is referred in " + textContent);
+                    }
+                    
+                    if(!isDummy && !hasRef) {
+                        //those are problematic
+                        numberOfMissingRefSequences++;
+                        
+                        allSeqHasRef = false;
+                        
+                        //those with missing refs
+                        textIdsWithMissingRef.add(textContent.getIdHex());
+                        
+                        noRefs.add(seq.get(0));
+                        
+                        //note: if there is no reference then also not in between
+                        boolean anyRefInBetween = seq.stream().anyMatch(c -> c.hasReferrers());
+                        if(anyRefInBetween) {
+                            numberOfAnyRefSequences++;
+                        }
+                    }
+                }//for each seq
+                
+                if(allSeqHasRef) {
+                    textIdsWithAllRef.add(textContent.getIdHex());
+                } else {
+                    
+                    //create a report to look into it
+                    
+                    List<HeartBeatDataScriptContent> scripts = folder.getContents(HeartBeatDataScriptContent.class);
+                    
+                    File reportFile;
+                    if(scripts.isEmpty()) {
+                        //appens once with folder 26030
+                        reportFile = new File(reportFolder, textContent.getIdHex() + "-folder" + folder.getIndex() + "-no-script-in-folder.html");
+                        reportFile.createNewFile();
+                        
+                    } else {
+                        reportFile = new File(reportFolder, textContent.getIdHex() + "-folder" + folder.getIndex() + ".html");
+                    
+                        HeartBeatDataScriptContent script = scripts.get(0);
+                        
+                        StringBuilder html = new StringBuilder();
+                        html.append("<html>");
+                        html.append("    <head>");
+                        html.append("        <title>");
+                        html.append("            Folder ").append(folder.getIndex()).append(" ").append(textContent.getIdHex()).append(" - DQ4 Script Check");
+                        html.append("        </title>");
+                        html.append("    </head>");
+                        html.append("    <body style=\"font-family: arial;\">");
+                        
+                        HeartBeatDataFile file = script.getParent();
+                        byte[] bytes = file.getOriginalContentBytes();
+                        if(file.isCompressed()) {
+                            bytes = LZSS.uncompress(new ByteArrayInputStream(bytes), file.getOriginalSizeUncompressed());
+                        }
+                        byte[] finalBytes = bytes;
+                        
+                        List<Integer> possiblePositions = new ArrayList<>();
+                        
+                        html.append("        <pre>");
+                        noRefs.forEach(c -> {
+                            int bitPos = c.getOriginalBitPosition();
+                            int bitPosShifted = bitPos + textContent.getTextBitOffset();
+                            String address = Inspector.toHex(Converter.intToBytesBE(bitPosShifted)).substring(4, 8);
+                            String addressReversed = address.substring(2, 4) + address.substring(0, 2);
+                            
+                            possiblePositions.addAll(Inspector.find(Inspector.toBytes(addressReversed), finalBytes));
+                            
+                            html
+                                    .append(c)
+                                    .append(", bitpos: ").append(bitPos)
+                                    .append(", bitPosShifted: ").append(bitPosShifted)
+                                    .append(", address: ").append(address)
+                                    .append(", addressReversed: ").append(addressReversed)
+                                    .append("\n");
+                        });
+                        html.append("        </pre>");
+                        
+                        html.append("        <pre>");
+                        int window = 8;
+                        for(int pos : possiblePositions) {
+                            byte[] match = Arrays.copyOfRange(bytes, Math.max(0, pos - window), Math.min(pos + 4, bytes.length));
+                            String matchHex = Inspector.toHex(match);
+                            html.append("0x").append(Inspector.toHex(Converter.intToBytesBE(pos))).append(" | ");
+                            html.append(matchHex.substring(0, matchHex.length() - (4*2)));
+                            html.append("<mark>");
+                            html.append(matchHex.substring(matchHex.length() - (4*2), matchHex.length()));
+                            html.append("</mark>");
+                            html.append("\n");
+                        }
+                        html.append("        </pre>");
+                        
+                        html.append("        <pre>");
+                        html.append(Inspector.toHexDump(bytes, 24));
+                        html.append("        </pre>");
+                        
+                        html.append("        <pre>");
+                        script.getEntries().forEach(e -> html.append(e).append("\n"));
+                        html.append("        </pre>");
+                        
+                        html.append("    </body>");
+                        html.append("</html>");
+
+                        FileUtils.writeStringToFile(reportFile, html.toString(), StandardCharsets.UTF_8);
+                    }
+                }
+                
+                
+            }//for each text content
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("numberOfSequences: ").append(numberOfSequences).append("\n");
+        //sb.append("numberOfMissingRefSequences: ").append(numberOfMissingRefSequences).append("\n");
+        //sb.append("numberOfAnyRefSequences: ").append(numberOfAnyRefSequences).append("\n");
+        sb.append("numberOfDummySequences: ").append(numberOfDummySequences).append("\n");
+        sb.append("textIdsWithMissingRef: ").append("(").append(textIdsWithMissingRef.size()).append(") ").append(textIdsWithMissingRef).append("\n");
+        sb.append("textIdsWithAllRef: ").append("(").append(textIdsWithAllRef.size()).append(") ").append(textIdsWithAllRef).append("\n");
+        sb.append("Ratio: ").append(textIdsWithAllRef.size() / (double)(textIdsWithAllRef.size()+textIdsWithMissingRef.size())).append("\n");
+        System.out.println(sb);
+    }
+    
+    
     /**
      * We should only translate selected text contents.
      *
@@ -141,7 +340,9 @@ public class Translator {
             //TODO this should be the real text
             String asciiStr = "";
             for (int i = 0; i < originalStarts.size(); i++) {
-                asciiStr += "test{7f0a}{0000}";
+                int reversedIndex = originalStarts.size() - i;
+                asciiStr += textContent.getIdHex() + " " + reversedIndex + ". Line{7f0a}{0000}";
+                //asciiStr += "test"+ reversedIndex +"{7f0a}{0000}";
             }
 
             List<HuffmanCharacter> replacer = ShiftJIS.toJapanese(asciiStr);
@@ -154,6 +355,10 @@ public class Translator {
 
             //copy the referrers
             for (int i = 0; i < originalStarts.size(); i++) {
+                if(originalStarts.get(i).getReferrers().isEmpty()) {
+                    throw new RuntimeException("No referrer found: " + originalStarts.get(i));
+                }
+                
                 replacerStarts.get(i).setReferrers(originalStarts.get(i).getReferrers());
             }
 

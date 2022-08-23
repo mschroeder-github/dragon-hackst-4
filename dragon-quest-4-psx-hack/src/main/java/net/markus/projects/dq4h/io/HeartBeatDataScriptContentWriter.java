@@ -45,7 +45,7 @@ public class HeartBeatDataScriptContentWriter extends DragonQuestWriter<HeartBea
                 
             } else if(entry instanceof ScriptStoreEntry) {
                 ScriptStoreEntry store = (ScriptStoreEntry) entry;
-                dqos.writeBytesBE(ScriptStoreEntry.STORE);
+                dqos.writeBytesBE(store.getCmd());
                 dqos.writeBytesBE(store.getParams());
                 
             } else if(entry instanceof ScriptBinaryEntry) {

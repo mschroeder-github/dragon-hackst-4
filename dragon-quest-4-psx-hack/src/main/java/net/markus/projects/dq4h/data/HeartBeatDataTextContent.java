@@ -283,19 +283,38 @@ public class HeartBeatDataTextContent extends HeartBeatDataFileContent implement
             }
         }
         
-        /*
-        HuffmanCharacter lastOne = getOriginalText().get(getOriginalText().size() - 1);
-        //if the last one is not {0000}
-        if(!(lastOne.getNode().isControlCharacter() && lastOne.getNode().isZero())) {
-            //then the last startChars is invalid and can be deleted
-            startChars.remove(startChars.size() - 1);
+        return startChars;
+    }
+    
+    /**
+     * Returns all the sequences which are list of {@link HuffmanCharacter}s that end in {0000} control character.
+     * @param givenText
+     * @return 
+     */
+    public static List<List<HuffmanCharacter>> getSequences(List<HuffmanCharacter> givenText) {
+        List<List<HuffmanCharacter>> sequences = new ArrayList<>();
+        
+        List<HuffmanCharacter> sequence = new ArrayList<>();
+        
+        for(HuffmanCharacter c : givenText) {
+            sequence.add(c);
+            
+            //if {0000} start new sequence
+            if(c.getNode().isNullCharacter()) {
+                sequences.add(sequence);
+                sequence = new ArrayList<>();
+            }
         }
         
-        //remove all {0000}, they cannot be starting characters. this happens in the dummy texts
-        startChars.removeIf(c -> c.getNode().isControlCharacter() && lastOne.getNode().isZero());
-        */
-        
-        return startChars;
+        return sequences;
+    }
+    
+    /**
+     * Returns all the sequences of {@link #getOriginalText() } which are list of {@link HuffmanCharacter}s that end in {0000} control character.
+     * @return 
+     */
+    public List<List<HuffmanCharacter>> getOriginalSequences() {
+        return getSequences(originalText);
     }
     
     public void setTree(HuffmanNode treeRoot) {

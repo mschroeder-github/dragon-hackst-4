@@ -72,13 +72,55 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                         //extra compression step
                         contentBytes = LZSS.compress(contentBytes, -1);
                         
+                        //TODO it is not dependend on the zeros, it is dependend on some buffersize it seems
+                        //because when the pointers are changed (from "test" to "tests") then the size changes
+                        //and the compressed script changes.
+                        
+                        int sizeDiff = file.getOriginalContentBytes().length - contentBytes.length;
+                        
+                        /*
+                        //how many zeros are there in changed
+                        int zeroIndexChanged;
+                        for(zeroIndexChanged = contentBytes.length-1; zeroIndexChanged >= 0; zeroIndexChanged--) {
+                            if(contentBytes[zeroIndexChanged] != (byte) 0) {
+                                break;
+                            }
+                        }
+                        
+                        //how many zeros are there
+                        byte[] orig = file.getOriginalContentBytes();
+                        int zeroIndexOriginal;
+                        for(zeroIndexOriginal = orig.length-1; zeroIndexOriginal >= 0; zeroIndexOriginal--) {
+                            if(orig[zeroIndexOriginal] != (byte) 0) {
+                                break;
+                            }
+                        }
+                        
+                        //here is a non-zero byte and it should be the same in both arrays
+                        if(orig[zeroIndexOriginal] != contentBytes[zeroIndexChanged]) {
+                            throw new IOException("End of compressed script do not match with original script");
+                        }
+                        
+                        //how many zeros do we have to add
+                        int zerosChanged = contentBytes.length - (zeroIndexChanged + 1);
+                        int zerosOriginal = orig.length - (zeroIndexOriginal + 1);
+                        
+                        if(zerosChanged > zerosOriginal) {
+                            throw new IOException("There are more zeros in compressed script than in the original");
+                        }
+                        int zerosDiff = zerosOriginal - zerosChanged;
+                        */
+                        
+                        //update
+                        
                         //tested with 006C text id and its script:
                         //the last two 0x0000 are very important for the decompression algo in the game
                         //if they are not there, the game crashes
-                        byte[] longerContentBytes = new byte[contentBytes.length + 2];
+                        //maybe 4 times 0x00 are more save that he game will not crash
+                        byte[] longerContentBytes = new byte[contentBytes.length + sizeDiff];
                         System.arraycopy(contentBytes, 0, longerContentBytes, 0, contentBytes.length);
-                        
                         contentBytes = longerContentBytes;
+                        
 
                     } else {
                         //uncompressed: so uncompressed size is the same

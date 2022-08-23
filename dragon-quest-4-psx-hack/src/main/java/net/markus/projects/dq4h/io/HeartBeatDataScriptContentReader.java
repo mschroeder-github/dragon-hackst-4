@@ -9,6 +9,7 @@ import net.markus.projects.dq4h.data.ScriptEntry;
 import net.markus.projects.dq4h.data.ScriptNopEntry;
 import net.markus.projects.dq4h.data.ScriptSectionEntry;
 import net.markus.projects.dq4h.data.ScriptSeparatorEntry;
+import net.markus.projects.dq4h.data.ScriptSpecialStoreEntry;
 import net.markus.projects.dq4h.data.ScriptStoreEntry;
 
 /**
@@ -106,21 +107,73 @@ public class HeartBeatDataScriptContentReader extends DragonQuestReader<HeartBea
             String cmdHex = Inspector.toHex(cmd);
             switch(cmdHex) {
                 case "c021a0": paramLen = 4; break;
+                case "c021a3": paramLen = 4; break;
+                case "c061a0": paramLen = 2; break; //because: ScriptBinaryEntry{command=c061a0, parameters=7802 | f421a0}
+                case "c221a1": paramLen = 7; break;
+                case "c31678": paramLen = 2; break;
                 case "43b100": paramLen = 4; break;
+                case "a09a01": paramLen = 4; break;
+                case "a0e103": paramLen = 4; break;
+                case "a06c01": paramLen = 4; break;
+                case "a0ae01": paramLen = 4; break;
+                case "a078fd": paramLen = 2; break;
+                case "a07901": paramLen = 2; break;
+                case "a078fe": paramLen = 2; break;
                 case "f1063a": paramLen = 2; break;
+                case "f60500": paramLen = 2; break;
+                case "e0063d": paramLen = 2; break; //only two because ScriptBinaryEntry{command=e0063d, parameters=1700c021a0fa0210}
                 case "5f3030": paramLen = 2; break;
+                case "f421a0": paramLen = 6; break; //see e.g. text id 00ec
+                case "c01678": paramLen = 2; break; //see text id 0067
+                case "202564": paramLen = 2; break; //see text id 0124
+                
+                //special store
+                case "c0267b": paramLen = 7; break;
+                case "c02678": paramLen = 5; break;
+                case "c0263b": paramLen = 6; break;
             }
 
             byte[] params = dqis.readBytesBE(paramLen);
             //System.out.println("\tparam " + Inspector.toHex(params));
+            String paramsHex = Inspector.toHex(params);
+            
+            //special case for this command
+            if(cmdHex.equals("c061a0")) {
+                //in text id 0135
+                //ScriptBinaryEntry{command=c061a0, parameters=3b04}
+                //ScriptBinaryEntry{command=00b401}
+                //ScriptBinaryEntry{command=a0c021}
+                //when param starts with '3' not '7' then there is one more byte in params it seems
+                if(!paramsHex.startsWith("7")) {//paramsHex.startsWith("3")) {
+                    params = new byte[] { params[0], params[1], dqis.readBytesBE(1)[0] };
+                }
+            }
+            
             
             if(cmdHex.equals("c021a0")) {
                 script.getEntries().add(new ScriptStoreEntry(params));
+                
+            } else if(cmdHex.equals("c0267b") || cmdHex.equals("c02678") || cmdHex.equals("c0263b")) {
+                ScriptSpecialStoreEntry special = new ScriptSpecialStoreEntry(cmd, params);
+                script.getEntries().add(special);
                 
             } else {
                 //default
                 script.getEntries().add(new ScriptBinaryEntry(cmd, params));
             }
+            
+            //TODO c0267b is also a store command (7 bytes param), e.g.
+            //                            bitpos  text id
+            //8707: c0 26 7b | 0a 00 10 | 87 07 | e0 1b
+            //e407: c0 26 7b | 0a 00 20 | e4 07 | e0 1b
+            //e609: c0 26 7b | 0a 00 18 | e6 09 | e0 1b 
+
+            
+            //TODO c02678 (5 bytes param)
+            //ScriptBinaryEntry{command=c02678, parameters=fd391ff022}
+            //   bitpos
+            //fd 391f | f022 => text id: 022f
+            
         }
         
         //set parent

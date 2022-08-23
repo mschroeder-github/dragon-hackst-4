@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import net.markus.projects.dq4h.data.HeartBeatDataFile;
+import net.markus.projects.dq4h.data.HeartBeatDataScriptContent;
+import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
+import net.markus.projects.dq4h.data.HuffmanCharacter;
 import static net.markus.projects.dq4h.io.Inspector.toASCII;
 import static net.markus.projects.dq4h.io.Inspector.toHex;
 import org.apache.commons.io.FileUtils;
@@ -91,15 +94,27 @@ public class ChangeLogEntry {
             len = 2;
         }
         
+        HeartBeatDataTextContent textContent = null;
+        HeartBeatDataScriptContent scriptContent = null;
+        
+        String textId = "";
+        if(file.getContent() instanceof HeartBeatDataTextContent) {
+            textContent = (HeartBeatDataTextContent) file.getContent();
+            textId = " " + textContent.getIdHex();
+        }
+        if(file.getContent() instanceof HeartBeatDataScriptContent) {
+            scriptContent = (HeartBeatDataScriptContent) file.getContent();
+        }
+        
         html.append("<html>");
         html.append("    <head>");
         html.append("        <title>");
-        html.append("            ").append(file.getPath()).append(" - DQ4 Comparison");
+        html.append("            ").append(file.getPath()).append(textId).append(" - DQ4 Comparison");
         html.append("        </title>");
         html.append("    </head>");
         html.append("    <body style=\"font-family: arial;\">");
-        html.append("        <style>mark { background-color: lightblue }</style>");
-        html.append("        <h2>").append(file.getPath()).append("</h2>");
+        html.append("        <style>mark { background-color: lightblue } table { border: 1px solid black; border-collapse: collapse; } td { border: 1px solid black; }</style>");
+        html.append("        <h2>").append(file.getPath()).append(textId).append("</h2>");
         html.append("        <pre>").append(file.toString()).append("</pre>");
         
         for(int i = 0; i < len; i++) {
@@ -111,21 +126,85 @@ public class ChangeLogEntry {
                 //a = LZSS.uncompress(new ByteArrayInputStream(a));
                 //b = LZSS.uncompress(new ByteArrayInputStream(b));
             }
-            html.append("    <table style=\"width: 100%; margin: 5px; padding: 5px;\">");
+            html.append("    <table style=\"width: 100%; margin: 5px; padding: 5px\">");
             html.append("        <tr>");
-            html.append("        <td>");
+            html.append("        <td style=\"vertical-align: top\">");
             html.append("            <h3>Original</h3>");
             html.append("            <pre>");
             html.append(toHexDump(a, b, w, true, false));
             html.append("            </pre>");
             html.append("        </td>");
-            html.append("        <td>");
+            html.append("        <td style=\"vertical-align: top\">");
             html.append("            <h3>Changed</h3>");
             html.append("            <pre>");
             html.append(toHexDump(b, a, w, true, false));
             html.append("            </pre>");
             html.append("        </td>");
             html.append("        </tr>");
+            
+            if(i == 0 && textContent != null) {
+                //tree
+                html.append("        <tr>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append("            <pre>");
+                html.append(textContent.getOriginalTree().toStringTree());
+                html.append("            </pre>");
+                html.append("        </td>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append("            <pre>");
+                html.append(textContent.getTree().toStringTree());
+                html.append("            </pre>");
+                html.append("        </td>");
+                html.append("        </tr>");
+                
+                //text as list
+                html.append("        <tr>");
+                html.append("        <td style=\"vertical-align: top; font-size: 9px\">");
+                html.append("            <pre>");
+                textContent.getOriginalText().forEach(c -> { 
+                    html.append(c).append("\n");
+                    if(c.getNode().isNullCharacter()) {
+                        html.append("\n");
+                    }
+                });
+                html.append("            </pre>");
+                html.append("        </td>");
+                html.append("        <td style=\"vertical-align: top; font-size: 9px\">");
+                html.append("            <pre>");
+                textContent.getText().forEach(c -> { 
+                    html.append(c).append("\n");
+                    if(c.getNode().isNullCharacter()) {
+                        html.append("\n");
+                    }
+                });
+                html.append("            </pre>");
+                html.append("        </td>");
+                html.append("        </tr>");
+                
+                //text as string
+                html.append("        <tr>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append(HuffmanCharacter.listToString(textContent.getOriginalText()));
+                html.append("        </td>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append(HuffmanCharacter.listToString(textContent.getText()));
+                html.append("        </td>");
+                html.append("        </tr>");
+            }
+            
+            //script
+            if(i == 1 && scriptContent != null) {
+                html.append("        <tr>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append("        </td>");
+                html.append("        <td style=\"vertical-align: top\">");
+                html.append("            <pre>");
+                scriptContent.getEntries().forEach(e -> html.append(e).append("\n"));
+                html.append("            </pre>");
+                html.append("        </td>");
+                html.append("        </tr>");
+            }
+            
             html.append("    </table>");
         }
         html.append("    </body>");
@@ -217,6 +296,11 @@ public class ChangeLogEntry {
     }
     
     public String getFilename() {
-        return file.getPath().replace("/", "-") + "-type" + file.getOriginalType();
+        String textId = "";
+        if(file.getContent() instanceof HeartBeatDataTextContent) {
+            textId = "-" + ((HeartBeatDataTextContent)file.getContent()).getIdHex();
+        }
+        
+        return file.getPath().replace("/", "-") + "-type" + file.getOriginalType() + textId;
     }
 }

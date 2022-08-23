@@ -1,7 +1,9 @@
 
 package net.markus.projects.dq4h.io;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * To inspect data values we convert data to textual representations.
@@ -172,4 +174,17 @@ public class Inspector {
         return data;
     }
     
+    public static List<Integer> find(byte[] pattern, byte[] data) {
+        List<Integer> pos = new ArrayList<>();
+
+        for (int i = 0; i < data.length - pattern.length + 1; i++) { //+1 to really get to the last byte
+            byte[] copy = Arrays.copyOfRange(data, i, i + pattern.length);
+
+            if (Arrays.equals(copy, pattern)) {
+                pos.add(i);
+            }
+        }
+
+        return pos;
+    }
 }

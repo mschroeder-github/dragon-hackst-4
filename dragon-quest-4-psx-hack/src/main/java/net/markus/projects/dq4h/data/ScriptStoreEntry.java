@@ -15,14 +15,24 @@ public class ScriptStoreEntry extends ScriptEntry implements HuffmanCharacterRef
      */
     public static final byte[] STORE = new byte[] { (byte) 0xc0, (byte) 0x21, (byte) 0xa0 };
     
+    private byte[] cmd;
     private byte[] params;
     
     private HuffmanCharacter referredCharacter;
 
     public ScriptStoreEntry(byte[] params) {
+        this.cmd = STORE;
         this.params = params;
     }
 
+    public byte[] getCmd() {
+        return cmd;
+    }
+
+    public void setCmd(byte[] cmd) {
+        this.cmd = cmd;
+    }
+    
     /**
      * Can be a dialog pointer, e.g. when reversed 0x06c00f91.
      * The params are not stored in reversed order.
