@@ -29,14 +29,14 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
     }
 
     @Override
-    public void write(HeartBeatDataFolderEntry entry, OutputStream output) throws IOException {
+    public void write(HeartBeatDataFolderEntry folder, OutputStream output) throws IOException {
 
         //for each file we need the actual bytes and the uncompressed size (if compressed)
         Map<HeartBeatDataFile, FileContent> file2content = new HashMap<>();
 
         //we just use the original data for now
         //this is identity function
-        for (HeartBeatDataFile file : entry.getFiles()) {
+        for (HeartBeatDataFile file : folder.getFiles()) {
 
             FileContent content = new FileContent();
 
@@ -72,55 +72,35 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                         //extra compression step
                         contentBytes = LZSS.compress(contentBytes, -1);
                         
-                        //TODO it is not dependend on the zeros, it is dependend on some buffersize it seems
+                        //it is not dependend on the zeros, it is dependend on some buffersize it seems
                         //because when the pointers are changed (from "test" to "tests") then the size changes
                         //and the compressed script changes.
-                        
+                        //when we use the original file length there seems to be enough 0x00 bytes there
                         int sizeDiff = file.getOriginalContentBytes().length - contentBytes.length;
-                        
-                        /*
-                        //how many zeros are there in changed
-                        int zeroIndexChanged;
-                        for(zeroIndexChanged = contentBytes.length-1; zeroIndexChanged >= 0; zeroIndexChanged--) {
-                            if(contentBytes[zeroIndexChanged] != (byte) 0) {
-                                break;
-                            }
+                        //a small negative diff is maybe not problematic
+                        if(sizeDiff < -1) {
+                            throw new IOException("original content bytes is smaller than the compressed content bytes in " + file + ": " +
+                                    file.getOriginalContentBytes().length + " < " + contentBytes.length + "\n" + 
+                                    "original:\n" +
+                                    Inspector.toHexDump(file.getOriginalContentBytes(), 24) + "\n" +
+                                    "changed:\n" +
+                                    Inspector.toHexDump(contentBytes, 24)
+                            );
                         }
                         
-                        //how many zeros are there
-                        byte[] orig = file.getOriginalContentBytes();
-                        int zeroIndexOriginal;
-                        for(zeroIndexOriginal = orig.length-1; zeroIndexOriginal >= 0; zeroIndexOriginal--) {
-                            if(orig[zeroIndexOriginal] != (byte) 0) {
-                                break;
-                            }
+                        //normalize
+                        if(sizeDiff < 0) {
+                            sizeDiff = 0;
                         }
-                        
-                        //here is a non-zero byte and it should be the same in both arrays
-                        if(orig[zeroIndexOriginal] != contentBytes[zeroIndexChanged]) {
-                            throw new IOException("End of compressed script do not match with original script");
-                        }
-                        
-                        //how many zeros do we have to add
-                        int zerosChanged = contentBytes.length - (zeroIndexChanged + 1);
-                        int zerosOriginal = orig.length - (zeroIndexOriginal + 1);
-                        
-                        if(zerosChanged > zerosOriginal) {
-                            throw new IOException("There are more zeros in compressed script than in the original");
-                        }
-                        int zerosDiff = zerosOriginal - zerosChanged;
-                        */
-                        
-                        //update
                         
                         //tested with 006C text id and its script:
                         //the last two 0x0000 are very important for the decompression algo in the game
                         //if they are not there, the game crashes
-                        //maybe 4 times 0x00 are more save that he game will not crash
-                        byte[] longerContentBytes = new byte[contentBytes.length + sizeDiff];
-                        System.arraycopy(contentBytes, 0, longerContentBytes, 0, contentBytes.length);
-                        contentBytes = longerContentBytes;
-                        
+                        if(sizeDiff > 0) {
+                            byte[] longerContentBytes = new byte[contentBytes.length + sizeDiff];
+                            System.arraycopy(contentBytes, 0, longerContentBytes, 0, contentBytes.length);
+                            contentBytes = longerContentBytes;
+                        }
 
                     } else {
                         //uncompressed: so uncompressed size is the same
@@ -132,6 +112,19 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                     
                 } else {
                     throw new IOException("content to be patched has not a writer");
+                }
+                
+                //check if we wrote more than in the original
+                int sizeDiff = content.getSize() - file.getOriginalContentBytes().length;
+                if(sizeDiff > 0) {
+                    
+                    //the folder would overflow because the extra bytes make the folder too large and a new sector would start 
+                    if(sizeDiff > folder.getNumberOfRemainingBytes()) {
+                        throw new IOException("Folder size overflow because of " + file);
+                    }
+                    
+                    //if there is no overflow we reduce the number of remaining bytes to let also other files check this value
+                    folder.changeNumberOfRemainingBytes(-sizeDiff);
                 }
                 
                 //log if a file was changed
@@ -154,25 +147,25 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
         HeartBeatDataFolderEntry expectedFolder = HeartBeatDataFolderEntry.calculateExpectedFolder(file2content.values());
 
         //we have to use the same number of sectors so that there is no data shift
-        if (expectedFolder.getOriginalNumberOfSectors() != entry.getOriginalNumberOfSectors()) {
+        if (expectedFolder.getOriginalNumberOfSectors() != folder.getOriginalNumberOfSectors()) {
             throw new IOException(String.format("Sector missmatch: expected sectors (%d) != original sectors (%d).\n%s\n%s",
                     expectedFolder.getOriginalNumberOfSectors(),
-                    entry.getOriginalNumberOfSectors(),
+                    folder.getOriginalNumberOfSectors(),
                     expectedFolder,
-                    entry
+                    folder
             ));
         }
 
         DragonQuestOutputStream dqos = new DragonQuestOutputStream(output);
 
         //folder header info (16 bytes)
-        dqos.writeIntLE(entry.getFiles().size());
+        dqos.writeIntLE(folder.getFiles().size());
         dqos.writeIntLE(expectedFolder.getOriginalNumberOfSectors());
         dqos.writeIntLE(expectedFolder.getOriginalSize());
         dqos.write(new byte[4]);
 
         //all file header infos concatenated
-        for (HeartBeatDataFile file : entry.getFiles()) {
+        for (HeartBeatDataFile file : folder.getFiles()) {
             FileContent content = file2content.get(file);
 
             //16 byte header
@@ -187,13 +180,19 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
         }
 
         //all file content concatenated
-        for (HeartBeatDataFile file : entry.getFiles()) {
+        for (HeartBeatDataFile file : folder.getFiles()) {
             FileContent content = file2content.get(file);
 
             dqos.write(content.getBytes());
         }
 
+        //the expected one should be the actual one
+        if(folder.getNumberOfRemainingBytes() != expectedFolder.getOriginalNumberOfRemainingBytes()) {
+            throw new IOException("Expected number of bytes is wrong");
+        }
+        
         //fill remaining space with zero bytes
+        //this is already the expected size and it considers if the file sizes changed
         dqos.write(new byte[expectedFolder.getOriginalNumberOfRemainingBytes()]);
 
     }

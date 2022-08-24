@@ -39,6 +39,25 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         int treeBytesDiff = textContent.getOriginalTreeBytes().length - treeBytes.length;
         int textBytesDiff = textContent.getOriginalTextBytes().length - textBytes.length;
         
+        if(treeBytesDiff < 0) {
+            //throw new IOException(textContent.getIdHex() + " number of byte for tree is larger than original: " + 
+            //        textContent.getOriginalTreeBytes().length + " < " + treeBytes.length + "\n" +
+            //        textContent.getOriginalTree().toStringTree()
+            //);
+            
+            //cannot get smaller than original
+            //we created a larger tree, but this is still fine because we have space left in text bytes
+            treeBytesDiff = 0;
+        }
+        
+        if(textBytesDiff < 0) {
+            //this is not good, our text became larger than the original which will increase the file size
+            throw new IOException(textContent.getIdHex() + " number of byte for text is larger than original: " + 
+                    textContent.getOriginalTextBytes().length + " < " + textBytes.length + "\n" +
+                    "original text is: " + HuffmanCharacter.listToString(textContent.getOriginalText())
+            );
+        }
+        
         //this works
         byte[] longerTextBytes = new byte[textBytes.length + treeBytesDiff + textBytesDiff];
         System.arraycopy(textBytes, 0, longerTextBytes, 0, textBytes.length);
@@ -122,14 +141,10 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         //fill with zeros until we reach the original file size
         //hopefully this will work and not break the game
         int originalFileSize = textContent.getParent().getOriginalContentBytes().length;
-        
-        if(dqos.getPosition() > originalFileSize) {
-            throw new IOException("The new file size is larger than the original file size");
-        }
-        
         while(dqos.getPosition() < originalFileSize) {
             dqos.write(new byte[] { 0 });
         }
+        
     }
     
     //tree =========================

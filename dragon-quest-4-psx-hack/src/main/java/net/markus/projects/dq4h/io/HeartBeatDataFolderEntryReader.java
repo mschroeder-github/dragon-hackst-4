@@ -122,6 +122,7 @@ public class HeartBeatDataFolderEntryReader extends DragonQuestReader<HeartBeatD
         }
 
         folder.setOriginalNumberOfRemainingBytes(remaining.length);
+        folder.setNumberOfRemainingBytes(remaining.length);
 
         pointerAssociation(folder);
 

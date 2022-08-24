@@ -31,7 +31,7 @@ public class ImportExportImportRoundtrip {
         if(true) {
             Translator translator = new Translator();
             translator.setBinary(originalBin);
-            translator.selectiveTranslation("006c");
+            translator.selectiveTranslationTest("006c");
         }
         
         exportData(originalBin, inputFile, outputFile, config);

@@ -69,9 +69,6 @@ public class HeartBeatDataScriptContentReader extends DragonQuestReader<HeartBea
                 continue;
             }
             
-            //TODO maybe there is 0xb3 <2 bytes> <4 bytes> and 0xb4 <2 bytes> as well
-            //for now this is just a binary command
-            
             //command
             byte[] cmd12 = dqis.readBytesBE(2);
             byte[] cmd = new byte[] { first[0], cmd12[0], cmd12[1] };
@@ -161,18 +158,6 @@ public class HeartBeatDataScriptContentReader extends DragonQuestReader<HeartBea
                 //default
                 script.getEntries().add(new ScriptBinaryEntry(cmd, params));
             }
-            
-            //TODO c0267b is also a store command (7 bytes param), e.g.
-            //                            bitpos  text id
-            //8707: c0 26 7b | 0a 00 10 | 87 07 | e0 1b
-            //e407: c0 26 7b | 0a 00 20 | e4 07 | e0 1b
-            //e609: c0 26 7b | 0a 00 18 | e6 09 | e0 1b 
-
-            
-            //TODO c02678 (5 bytes param)
-            //ScriptBinaryEntry{command=c02678, parameters=fd391ff022}
-            //   bitpos
-            //fd 391f | f022 => text id: 022f
             
         }
         

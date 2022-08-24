@@ -55,12 +55,14 @@ public class Translator {
         //translator.checkTextSequences();
 
         //in cellar
-        translator.selectiveTranslation("006c");
+        //translator.selectiveTranslationTest("006c");
         //town outside
         //translator.selectiveTranslation("0067");
         
         //one with special store
         //translator.selectiveTranslation("022f");
+        
+        translator.pointerCompleteTranslationTest();
 
         translator.exportData();
     }
@@ -309,13 +311,80 @@ public class Translator {
         System.out.println(sb);
     }
     
+    /**
+     * Checks all text contents if they have all references and returns
+     * their text ids in sorted order.
+     * @return 
+     */
+    public List<String> getPointerCompleteTextIds() {
+        Set<String> complete = new HashSet<>();
+        
+        for (HeartBeatDataFolderEntry folder : binary.getHeartBeatData().getFolders()) {
+            
+            for(HeartBeatDataTextContent textContent : folder.getContents(HeartBeatDataTextContent.class)) {
+                
+                List<List<HuffmanCharacter>> sequences = textContent.getOriginalSequences();
+                
+                boolean allSeqHasRef = true;
+                
+                if(textContent.getOriginalTreeBytes().length == 18) {
+                    //those are all the dummy only text contents where we do not have to patch something
+                    /*
+                    └── HuffmanNode{type=Branch, content=3}
+                    ├── HuffmanNode{type=Branch, content=0}
+                    │   ├── HuffmanNode{type=ControlCharacter, content=0000}
+                    │   └── HuffmanNode{type=ControlCharacter, content=7f0b}
+                    └── HuffmanNode{type=Branch, content=2}
+                        ├── HuffmanNode{type=Character, content=ダ}
+                        └── HuffmanNode{type=Branch, content=1}
+                            ├── HuffmanNode{type=Character, content=ー}
+                            └── HuffmanNode{type=Character, content=ミ}
+                    */
+                    continue;
+                }
+                
+                for(List<HuffmanCharacter> seq : sequences) {
+                    String str = HuffmanCharacter.listToString(seq);
+                    boolean isDummy = str.startsWith("ダミー");
+                    boolean hasRef = seq.get(0).hasReferrers();
+                    
+                    if(!isDummy && !hasRef) {
+                        allSeqHasRef = false;
+                        break;
+                    }
+                }
+                
+                if(allSeqHasRef) {
+                    complete.add(textContent.getIdHex());
+                }
+            }
+        }
+        
+        List<String> l = new ArrayList<>(complete);
+        l.sort((a,b) -> a.compareToIgnoreCase(b));
+        return l;
+    }
+    
+    public void pointerCompleteTranslationTest() {
+        for(String textId : getPointerCompleteTextIds()) {
+            
+            //java.io.IOException: 0180 number of byte for text is larger than original: 8 < 16
+            //original text is: ダミー{7f0b}{0000}ホフマンの家{7f0b}{0000}
+            if(textId.equals("0180")) {
+                continue;
+            }
+            
+            selectiveTranslationTest(textId);
+        }
+    }
     
     /**
      * We should only translate selected text contents.
-     *
+     * It is a test so it just 'translates' the text to technical information
+     * for debugging.
      * @param textId a two byte hex value, e.g. "006c"
      */
-    public void selectiveTranslation(String textId) {
+    public void selectiveTranslationTest(String textId) {
 
         List<HeartBeatDataTextContent> textContents = new ArrayList<>();
         for (HeartBeatDataFolderEntry folder : binary.getHeartBeatData().getFolders()) {
@@ -334,13 +403,20 @@ public class Translator {
             //1. original abcdef{0000}abcdef{0000}abcdef{0000}abcdef{0000}
             //2. translated efg{0000}hijk{0000}lmbn{0000}abc{0000}
             //the starts need to be associated correctly
-            List<HuffmanCharacter> originalStarts = textContent.getOriginalStartCharacters();
-
-            //build artifical one
-            //TODO this should be the real text
+            //List<HuffmanCharacter> originalStarts = textContent.getOriginalStartCharacters();
+            List<List<HuffmanCharacter>> originalSequences = textContent.getOriginalSequences();
+            
+            if(originalSequences.isEmpty()) {
+                System.out.println(textContent.getIdHex() + " skipped because there are no sequences found in text: " + 
+                        HuffmanCharacter.listToString(textContent.getOriginalText())
+                );
+                continue;
+            }
+            
+            //build artifical one for debugging
             String asciiStr = "";
-            for (int i = 0; i < originalStarts.size(); i++) {
-                int reversedIndex = originalStarts.size() - i;
+            for (int i = 0; i < originalSequences.size(); i++) {
+                int reversedIndex = originalSequences.size() - i;
                 asciiStr += textContent.getIdHex() + " " + reversedIndex + ". Line{7f0a}{0000}";
                 //asciiStr += "test"+ reversedIndex +"{7f0a}{0000}";
             }
@@ -349,17 +425,20 @@ public class Translator {
             List<HuffmanCharacter> replacerStarts = HeartBeatDataTextContent.getStartCharacters(replacer);
 
             //need to be same number of starts
-            if (originalStarts.size() != replacerStarts.size()) {
+            if (originalSequences.size() != replacerStarts.size()) {
                 throw new RuntimeException("different number of sequences");
             }
 
             //copy the referrers
-            for (int i = 0; i < originalStarts.size(); i++) {
-                if(originalStarts.get(i).getReferrers().isEmpty()) {
-                    throw new RuntimeException("No referrer found: " + originalStarts.get(i));
+            for (int i = 0; i < originalSequences.size(); i++) {
+                String str = HuffmanCharacter.listToString(originalSequences.get(i));
+                boolean isDummy = str.startsWith("ダミー");
+                
+                if(!isDummy && originalSequences.get(i).get(0).getReferrers().isEmpty()) {
+                    throw new RuntimeException("No referrer found: " + originalSequences.get(i).get(0));
                 }
                 
-                replacerStarts.get(i).setReferrers(originalStarts.get(i).getReferrers());
+                replacerStarts.get(i).setReferrers(originalSequences.get(i).get(0).getReferrers());
             }
 
             //from text the tree will be calculated in textcontentwriter

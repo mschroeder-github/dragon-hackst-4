@@ -39,6 +39,8 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
     
     private int originalNumberOfRemainingBytes;
     
+    private int numberOfRemainingBytes;
+    
     private List<HeartBeatDataFile> files;
     
     public HeartBeatDataFolderEntry() {
@@ -144,6 +146,30 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
         this.originalNumberOfRemainingBytes = numberOfRemainingBytes;
     }
 
+    /**
+     * The remaining bytes after the files in the folder were patched.
+     * @return 
+     */
+    public int getNumberOfRemainingBytes() {
+        return numberOfRemainingBytes;
+    }
+    
+    /**
+     * Changes the {@link #getNumberOfRemainingBytes() } value with a delta value.
+     * @param delta negative value decreses, positive value increases
+     */
+    public void changeNumberOfRemainingBytes(int delta) {
+        numberOfRemainingBytes += delta;
+    }
+
+    /**
+     * Use this indicator to keep track of the remaining bytes when file sizes are larger than the original ones.
+     * @param numberOfRemainingBytes 
+     */
+    public void setNumberOfRemainingBytes(int numberOfRemainingBytes) {
+        this.numberOfRemainingBytes = numberOfRemainingBytes;
+    }
+    
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
