@@ -228,6 +228,19 @@ public class ShiftJIS {
         return sjishort2char.get(Converter.bytesToShortBE(bytes));
     }
     
+    public static String getString(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < bytes.length; i += 2) {
+            Character c = getCharacter(new byte[] { bytes[i], bytes[i+1] });
+            if(c == null) {
+                sb.append("<null>");
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+    
     /**
      * Returns a japanese character for an hexadecimal value.
      * @param hex

@@ -2,6 +2,7 @@ package net.markus.projects.dq4h.translation;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -52,6 +53,8 @@ public class Translator {
 
         translator.importData();
         
+        translator.checkJapaneseText();
+        
         //translator.checkTextSequences();
 
         //in cellar
@@ -62,9 +65,9 @@ public class Translator {
         //one with special store
         //translator.selectiveTranslation("022f");
         
-        translator.pointerCompleteTranslationTest();
+        //translator.pointerCompleteTranslationTest();
 
-        translator.exportData();
+        //translator.exportData();
     }
 
     public Translator() {
@@ -140,6 +143,7 @@ public class Translator {
     }
 
     //-----------------------
+    //just checks
     
     public void checkTextSequences() throws IOException {
         
@@ -310,6 +314,118 @@ public class Translator {
         sb.append("Ratio: ").append(textIdsWithAllRef.size() / (double)(textIdsWithAllRef.size()+textIdsWithMissingRef.size())).append("\n");
         System.out.println(sb);
     }
+    
+    public void checkJapaneseText() throws IOException {
+        //List<JapaneseTextOccurrence> l = searchJapaneseText(binary.getExecutable(), binary.getExecutable().getData(), 2);
+        
+        int minSeqSize = 2;
+        
+        List<JapaneseTextOccurrence> list = new ArrayList<>();
+        
+        list.addAll(searchJapaneseText(binary.getExecutable(), binary.getExecutable().getData(), minSeqSize));
+        
+        for (HeartBeatDataFolderEntry folder : binary.getHeartBeatData().getFolders()) {
+            
+            for(HeartBeatDataFile file : folder.getFiles()) {
+                
+                byte[] bytes = file.getOriginalContentBytes();
+                if(file.isCompressed()) {
+                    bytes = LZSS.uncompress(new ByteArrayInputStream(bytes), file.getOriginalSizeUncompressed());
+                }
+                
+                list.addAll(searchJapaneseText(file, bytes, minSeqSize));
+            }
+            
+        }
+        
+        //largest sequence first
+        list.sort((a,b) -> Integer.compare(b.getLength(), a.getLength()));
+        
+        FileWriter fw = new FileWriter(new File("../../japanese-text-occurrences.txt"));
+        list.forEach(occ -> {
+            try {
+                fw.write(occ.toString());
+                fw.write("\n");
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        fw.close();
+    }
+    
+    private List<JapaneseTextOccurrence> searchJapaneseText(Object source, byte[] bytes, int minSeqSize) {
+        List<JapaneseTextOccurrence> list = new ArrayList<>();
+        
+        //shifted | swapped
+        //0       | 0
+        //1       | 0
+        //0       | 1
+        //1       | 1
+        JapaneseTextOccurrence[] occurArray = new JapaneseTextOccurrence[4];
+        
+        //for each two bytes
+        for(int i = 0; i < bytes.length - 2; i += 2) {
+            
+            //normal and shifted version
+            for(int j = 0; j < 2; j++) {
+                
+                for(boolean swapped : Arrays.asList(false, true)) {
+                
+                    byte[] twoBytes = swapped ? 
+                            new byte[] { bytes[i + j + 1], bytes[i + j] } : 
+                            new byte[] { bytes[i + j], bytes[i + j + 1] };
+
+                    Character c = ShiftJIS.getCharacter(twoBytes);
+
+                    int arrayIndex = j;
+                    
+                    //for array index
+                    if(swapped) {
+                        //j = 0 -> 2
+                        //j = 1 -> 3
+                        arrayIndex += 2;
+                    }
+                    
+                    if(c != null) {
+                        //found
+
+                        //System.out.println(j + ": " + c);
+
+                        //there is currently no sequence
+                        if(occurArray[arrayIndex] == null) {
+
+                            //init a sequence
+                            occurArray[arrayIndex] = new JapaneseTextOccurrence();
+                            occurArray[arrayIndex].setStart(i + j);
+                            occurArray[arrayIndex].setSource(source);
+                            occurArray[arrayIndex].setBytes(bytes);
+
+                        }
+
+                    } else {
+                        //not found
+                        if(occurArray[arrayIndex] != null) {
+                            occurArray[arrayIndex].setEnd(i + j);
+
+                            if(occurArray[arrayIndex].getLength() >= minSeqSize) {
+                                list.add(occurArray[arrayIndex]);
+                            }
+
+                            //reset
+                            occurArray[arrayIndex] = null;
+                        }
+                    }
+                
+                }
+            }
+        }
+        
+        
+        
+        return list;
+    }
+    
+    //----------------------
     
     /**
      * Checks all text contents if they have all references and returns
