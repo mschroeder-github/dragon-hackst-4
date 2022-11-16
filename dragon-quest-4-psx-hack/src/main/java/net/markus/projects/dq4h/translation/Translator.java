@@ -23,6 +23,7 @@ import net.markus.projects.dq4h.data.HuffmanCharacterReferrer;
 import net.markus.projects.dq4h.data.HuffmanNode;
 import net.markus.projects.dq4h.data.ScriptStoreEntry;
 import net.markus.projects.dq4h.data.VariableToDialogPointer;
+import net.markus.projects.dq4h.gui.TranslationProject;
 import net.markus.projects.dq4h.io.Converter;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
@@ -33,6 +34,7 @@ import net.markus.projects.dq4h.io.ShiftJIS;
 import net.markus.projects.dq4h.util.MemoryUtility;
 import org.apache.commons.io.FileUtils;
 import org.crosswire.common.compress.LZSS;
+import org.json.JSONObject;
 
 /**
  * The main class doing the translation or patching.
@@ -481,6 +483,10 @@ public class Translator {
         return l;
     }
     
+    /**
+     * Uses {@link #getPointerCompleteTextIds() } to run on them 
+     * {@link #selectiveTranslation(java.lang.String, org.json.JSONObject)  } but with empty JSON object (no translation given).
+     */
     public void pointerCompleteTranslationTest() {
         for(String textId : getPointerCompleteTextIds()) {
             
@@ -490,7 +496,7 @@ public class Translator {
                 continue;
             }
             
-            selectiveTranslationTest(textId);
+            selectiveTranslation(textId, new JSONObject());
         }
     }
     
@@ -499,7 +505,9 @@ public class Translator {
      * It is a test so it just 'translates' the text to technical information
      * for debugging.
      * @param textId a two byte hex value, e.g. "006c"
+     * @deprecated better use {@link #selectiveTranslation(java.lang.String, org.json.JSONObject) } with empty JSONObject.
      */
+    @Deprecated
     public void selectiveTranslationTest(String textId) {
 
         List<HeartBeatDataTextContent> textContents = new ArrayList<>();
@@ -535,6 +543,104 @@ public class Translator {
                 int reversedIndex = originalSequences.size() - i;
                 asciiStr += textContent.getIdHex() + " " + reversedIndex + ". Line{7f0a}{0000}";
                 //asciiStr += "test"+ reversedIndex +"{7f0a}{0000}";
+            }
+
+            List<HuffmanCharacter> replacer = ShiftJIS.toJapanese(asciiStr);
+            List<HuffmanCharacter> replacerStarts = HeartBeatDataTextContent.getStartCharacters(replacer);
+
+            //need to be same number of starts
+            if (originalSequences.size() != replacerStarts.size()) {
+                throw new RuntimeException("different number of sequences");
+            }
+
+            //copy the referrers
+            for (int i = 0; i < originalSequences.size(); i++) {
+                String str = HuffmanCharacter.listToString(originalSequences.get(i));
+                boolean isDummy = str.startsWith("ダミー");
+                
+                if(!isDummy && originalSequences.get(i).get(0).getReferrers().isEmpty()) {
+                    throw new RuntimeException("No referrer found: " + originalSequences.get(i).get(0));
+                }
+                
+                replacerStarts.get(i).setReferrers(originalSequences.get(i).get(0).getReferrers());
+            }
+
+            //from text the tree will be calculated in textcontentwriter
+            textContent.setText(replacer);
+
+            //activate that this content will be patched in the file
+            textContent.setPerformPatch(true);
+
+            //1. count how often a character occurs in the textContent.getText()
+            //we need a set of nodes where frequency is set
+            Set<HuffmanNode> nodes = toUniqueNodesWithFrequencies(textContent.getText());
+
+            //2. get the tree from nodes with frequency 
+            HuffmanNode tree = createHuffmanTree(nodes);
+            textContent.setTree(tree);
+            //System.out.println(tree.toStringTree());
+            
+            //3. the getText characters need bit codes and new bit positions
+            updateBitInformation(textContent, tree);
+            //after that we know the new bit positions and have to update all the referrers
+            
+            //4. update the bit postition in the referrers
+            updateReferrers(textContent);
+        }
+    }
+    
+    
+    /**
+     * Translates text contents with given textId using its meta data.
+     * This JSON object comes from {@link TranslationProject}.
+     * It does not have to be complete. In case the line is not translated, a default is given
+     * which is the text id and a line number: <code>"%s %d. Line{7f0a}{0000}"</code>. The line index is 1-indexed.
+     * It is a copy of {@link #selectiveTranslationTest(java.lang.String) } but with the possibility to state the
+     * translated lines.
+     * @param textId a two byte hex value, e.g. "006c"
+     * @param textIdMetaData a JSON object with translation text for
+     * each line using JSON keys, e.g. <code>{ "5": { "translation": "test" } }</code>
+     */
+    public void selectiveTranslation(String textId, JSONObject textIdMetaData) {
+
+        List<HeartBeatDataTextContent> textContents = new ArrayList<>();
+        for (HeartBeatDataFolderEntry folder : binary.getHeartBeatData().getFolders()) {
+            textContents.addAll(folder.getTextContentById(textId));
+        }
+
+        HeartBeatDataTextContentWriter w = new HeartBeatDataTextContentWriter();
+
+        for (HeartBeatDataTextContent textContent : textContents) {
+
+            //every start character is a sequence from a this character to {0000}
+            //for each sequence we would like to define another sequence
+            //we expect that each original sequence is referred by a pointer which is stored in the original first character
+            //we have to change this pointer according to the new bit offset
+            //we have two sequences
+            //1. original abcdef{0000}abcdef{0000}abcdef{0000}abcdef{0000}
+            //2. translated efg{0000}hijk{0000}lmbn{0000}abc{0000}
+            //the starts need to be associated correctly
+            //List<HuffmanCharacter> originalStarts = textContent.getOriginalStartCharacters();
+            List<List<HuffmanCharacter>> originalSequences = textContent.getOriginalSequences();
+            
+            if(originalSequences.isEmpty()) {
+                System.out.println(textContent.getIdHex() + " skipped because there are no sequences found in text: " + 
+                        HuffmanCharacter.listToString(textContent.getOriginalText())
+                );
+                continue;
+            }
+            
+            //build artifical one for debugging
+            String asciiStr = "";
+            for (int i = 0; i < originalSequences.size(); i++) {
+                
+                JSONObject textObj = textIdMetaData.optJSONObject("" + i);
+                
+                if(textObj == null || !textObj.has("translation")) {
+                    asciiStr += String.format("%s %d. Line{7f0a}{0000}", textContent.getIdHex(), (i + 1));
+                } else {
+                    asciiStr += textObj.getString("translation");
+                }
             }
 
             List<HuffmanCharacter> replacer = ShiftJIS.toJapanese(asciiStr);

@@ -24,6 +24,7 @@ import net.markus.projects.dq4h.data.HeartBeatDataFolderEntry;
 import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.data.HuffmanCharacter;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
+import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.IOConfig;
 import net.markus.projects.dq4h.translation.Translator;
 import net.markus.projects.dq4h.util.MemoryUtility;
@@ -52,6 +53,20 @@ public class TranslationProject {
      * Output file. dq4-patched.bin.
      */
     private File outputFile;
+    
+    /**
+     * Where the patch report is stored.
+     */
+    private File reportFolder;
+    /**
+     * Decides if after patch report is written to reportFolder.
+     */
+    private boolean writePatchReport;
+    
+    /**
+     * Patch all.
+     */
+    private boolean patchAll;
 
     /**
      * A translation file. We use JSON.
@@ -88,6 +103,7 @@ public class TranslationProject {
         translation = new JSONObject();
         translator = new Translator();
         textId2seqNoCache = new HashMap<>();
+        writePatchReport = true;
     }
 
     /**
@@ -100,6 +116,9 @@ public class TranslationProject {
     public void open(File binaryFile, ProjectListener listener) throws IOException {
         listener.setProgressMax(3);
         listener.setProgressValue(0);
+        
+        this.binaryFile = binaryFile;
+        this.reportFolder = new File(binaryFile.getParent(), "patch-report");
         
         //open binary (takes around 10 seconds)
         listener.setProgressText("Opening " + relativePath(binaryFile) + " (" + MemoryUtility.humanReadableByteCount(binaryFile.length()) + ")");
@@ -155,24 +174,96 @@ public class TranslationProject {
         listener.setProgressMax(1);
         listener.setProgressValue(0);
         
-        listener.setProgressText("Writing " + relativePath(translationFile));
+        //listener.setProgressText("Writing " + relativePath(translationFile));
         FileUtils.writeStringToFile(translationFile, translation.toString(2), StandardCharsets.UTF_8);
-        listener.setProgressText(MemoryUtility.humanReadableByteCount(translationFile.length()) + " written");
+        listener.setProgressText(relativePath(translationFile) + " (" + MemoryUtility.humanReadableByteCount(translationFile.length()) + ") written");
         
-        listener.setProgressText("Successful");
         listener.setProgressValue(1);
     }
 
     /**
      * Patches the binary file.
+     * Load the binary first with {@link #open(java.io.File, net.markus.projects.dq4h.gui.ProjectListener) }.
      * @param listener
      * @throws IOException 
      */
     public void patch(ProjectListener listener) throws IOException {
+        if (binary == null) {
+            return;
+        }
+                        
         //auto save before patch
         save(listener);
         
         
+        if(patchAll) {
+            listener.setProgressText("Embed test translations in all texts because Patch All is enabled");
+            translator.pointerCompleteTranslationTest();
+            
+        } else {
+            List<String> textIds = new ArrayList<>();
+            for(String textId : translation.keySet()) {
+                JSONObject textContent = translation.getJSONObject(textId);
+                //only those who have this activated
+                if(textContent.optBoolean("patch")) {
+                    textIds.add(textId);
+                }
+            }
+
+            if(textIds.isEmpty()) {
+                return;
+            }
+
+            listener.setProgressMax(3);
+            listener.setProgressValue(0);
+
+            //run selective translation, this sets text and trees and changes referer pointer
+            for(String textId : textIds) {
+                JSONObject textContent = translation.getJSONObject(textId);
+                listener.setProgressText("Embed translation in " + textId + " " + textContent.toString());
+                //TODO check if this can be done multiple times without any breaks
+                translator.selectiveTranslation(textId, textContent);
+            }
+        }
+        
+        listener.setProgressValue(1);
+        listener.setProgressText("Write patch to " + relativePath(outputFile));
+        
+        long begin = System.currentTimeMillis();
+        DragonQuestBinaryFileWriter binWriter = new DragonQuestBinaryFileWriter(ioConfig);
+        binWriter.patch(
+                binary,
+                binaryFile,
+                outputFile
+        );
+        long end = System.currentTimeMillis();
+
+        listener.setProgressText("Took " + (end - begin) + " ms");
+        listener.setProgressText(MemoryUtility.memoryStatistics());
+
+        if (binaryFile.length() != outputFile.length()) {
+            throw new RuntimeException("File size differ: " + binaryFile.length() + " != " + outputFile.length());
+        }
+        
+        if(writePatchReport) {
+            listener.setProgressValue(2);
+            listener.setProgressText("Write patch reports to " + relativePath(reportFolder) + " because Generate Patch Report is enabled");
+            
+            this.reportFolder.mkdirs();
+            for(File f : reportFolder.listFiles()) {
+                f.delete();
+            }
+            ioConfig.getChangeLogEntries().forEach(e -> {
+                try {
+                    e.saveHtmlReport(new File(reportFolder, e.getFilename() + ".html"));
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+        }
+        
+        listener.setProgressValue(3);
+        listener.setProgressText("Successful");
     }
 
     /**
@@ -272,14 +363,15 @@ public class TranslationProject {
 
             @Override
             public int getColumnCount() {
-                return 2;
+                return 3;
             }
 
             @Override
             public String getColumnName(int column) {
                 switch(column) {
-                    case 0: return "Japanese";
-                    case 1: return "Translation";
+                    case 0: return "Line";
+                    case 1: return "Japanese";
+                    case 2: return "Translation";
                 }
                 return "";
             }
@@ -290,8 +382,9 @@ public class TranslationProject {
                 List<HuffmanCharacter> sequence = originalSequences.get(rowIndex);
                 
                 switch(columnIndex) {
-                    case 0: return HuffmanCharacter.listToString(sequence);
-                    case 1: {
+                    case 0: return rowIndex + 1; //1-indexed line number
+                    case 1: return HuffmanCharacter.listToString(sequence);
+                    case 2: {
                         JSONObject textObj = translation.optJSONObject(textId);
                         if(textObj == null) {
                             return "";
@@ -314,8 +407,9 @@ public class TranslationProject {
             @Override
             public boolean isCellEditable(int rowIndex, int columnIndex) {
                switch(columnIndex) {
-                   case 0: return true; //to select text
-                   case 1: return true;
+                   case 0: return false;
+                   case 1: return true; //to select japanese text
+                   case 2: return true;
                }
                return false;
             }
@@ -325,8 +419,8 @@ public class TranslationProject {
                 if(!(aValue instanceof String)) {
                     return;
                 }
-                //no edit for japanese text
-                if(columnIndex == 0) {
+                //no edit for line and japanese text
+                if(columnIndex <= 1) {
                     return;
                 }
                 
@@ -446,4 +540,23 @@ public class TranslationProject {
         
         return new int[] { count, total };
     }
+
+    /**
+     * If true, will write the patch-report folder.
+     * @param writePatchReport 
+     */
+    public void setWritePatchReport(boolean writePatchReport) {
+        this.writePatchReport = writePatchReport;
+    }
+
+    /**
+     * Patches all instead of only the selected ones.
+     * @param patchAll 
+     */
+    public void setPatchAll(boolean patchAll) {
+        this.patchAll = patchAll;
+    }
+    
+    
+    
 }
