@@ -17,6 +17,7 @@ import javax.swing.JTable;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.text.BadLocationException;
+import net.markus.projects.dq4h.util.MemoryUtility;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
 /**
@@ -46,6 +47,7 @@ public class TranslatorFrame extends javax.swing.JFrame implements ProjectListen
         this.setTitle("Dragon Quest 4 PSX Patcher - Version " + version);
         this.log(getTitle());
         this.log("For more information visit http://markus-projects.net/dragon-hackst-iv/");
+        this.log(MemoryUtility.memoryStatistics());
         this.log("\nShort tutorial:\n\t* Click File > Open... and select dq4.bin file\n\t* Click on left-handed text id list to open text content\n\t* Enter translated text in right-handed table\n\t* Enable for patching with checkbox\n\t* Click File > Patch");
 
         configureFileChooser();
@@ -72,7 +74,7 @@ public class TranslatorFrame extends javax.swing.JFrame implements ProjectListen
                 sb.append(String.format(" (%d/%d)", stat[0], stat[1]));
                 //show name
                 String name = project.getName(textId);
-                if (!name.isBlank()) {
+                if (!name.trim().isEmpty()) {
                     sb.append(" ").append(name);
                 }
                 //set
@@ -352,7 +354,7 @@ public class TranslatorFrame extends javax.swing.JFrame implements ProjectListen
 
     private void jMenuItemPatchActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jMenuItemPatchActionPerformed
         tryTo(() -> {
-            project.setWritePatchReport(jCheckBoxMenuItemPatchAll.isSelected());
+            project.setWritePatchReport(jCheckBoxMenuItemPatchReport.isSelected());
             project.setPatchAll(jCheckBoxMenuItemPatchAll.isSelected());
             project.patch(this);
         });

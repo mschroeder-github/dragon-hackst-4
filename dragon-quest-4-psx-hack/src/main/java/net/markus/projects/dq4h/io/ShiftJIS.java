@@ -43,14 +43,14 @@ public class ShiftJIS {
         ascii2jp.put("$", "＄");
         ascii2jp.put("%", "％");
         ascii2jp.put("&", "＆");
-        ascii2jp.put("'", "’");
+        ascii2jp.put("'", "「"); //e.g. LEFT SINGLE QUOTATION MARK not avail in game font
         ascii2jp.put("(", "（");
         ascii2jp.put(")", "）");
         ascii2jp.put("*", "＊");
         ascii2jp.put("+", "＋");
         ascii2jp.put(",", "、");
         ascii2jp.put("-", "ー");
-        ascii2jp.put(".", "。");
+        ascii2jp.put(".", "．");//"。"); //FULLWIDTH FULL STOP is available
         ascii2jp.put("/", "／");
         
         //０ １ ２ ３ ４ ５ ６ ７ ８ ９ 

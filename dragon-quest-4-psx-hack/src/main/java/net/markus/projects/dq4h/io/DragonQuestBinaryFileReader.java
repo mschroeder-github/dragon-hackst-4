@@ -11,6 +11,7 @@ import net.markus.projects.dq4h.data.DragonQuestBinary;
 import net.markus.projects.dq4h.data.HeartBeatData;
 import net.markus.projects.dq4h.data.PsxExe;
 import net.markus.projects.dq4h.data.SystemConfig;
+import net.markus.projects.dq4h.util.MemoryUtility;
 
 /**
  * Reads {@link DragonQuestBinary}.
@@ -36,7 +37,10 @@ public class DragonQuestBinaryFileReader {
 
     private HeartBeatDataReader heartBeatDataReader;
     
+    private IOConfig config;
+    
     public DragonQuestBinaryFileReader(IOConfig config) {
+        this.config = config;
         heartBeatDataReader = new HeartBeatDataReader(config);
     }
     
@@ -46,10 +50,13 @@ public class DragonQuestBinaryFileReader {
         
         DragonQuestBinary binary = new DragonQuestBinary();
         
+        config.trace("seek 16 cd sectors");
+        
         //header stuff
         file.seek(SECTORSIZE * 16);
         
         //search for header and primary volume descriptor
+        config.trace("search for header and primary volume descriptor");
         byte[] sector = new byte[SECTORSIZE];
         while (file.read(sector) > 0) {
             if ((isHeader(Arrays.copyOfRange(sector, 24, 30)))
@@ -59,12 +66,14 @@ public class DragonQuestBinaryFileReader {
         }
         
         //root data
+        config.trace("root data");
         byte[] rootData = Arrays.copyOfRange(sector, 24, 2072);
         int startSector = readLittleEndianWord(Arrays.copyOfRange(rootData, 158, 162));
 		int size = readLittleEndianWord(Arrays.copyOfRange(rootData, 166,170));
         
         
         //files in root
+        config.trace("files in root");
         byte[] data = new byte[size];
         file.seek(SECTORSIZE * startSector + 24);
         file.read(data);
@@ -76,6 +85,7 @@ public class DragonQuestBinaryFileReader {
                 break;
             
             if (count > 1) {
+                config.trace("parse file at " + index);
                 parseFile(file, Arrays.copyOfRange(data, index, index + offset), binary);
                 index += offset - 1;
             } else {
@@ -107,6 +117,8 @@ public class DragonQuestBinaryFileReader {
 			return;
 		
         String name = dir ? sb.toString() : sb.toString().substring(0, sb.toString().length() - 2);
+        
+        config.trace("file name is " + name);
 
 		int startSector = readLittleEndianWord(Arrays.copyOfRange(header, 2, 6));
 		int size = readLittleEndianWord(Arrays.copyOfRange(header, 10, 14));
@@ -116,11 +128,23 @@ public class DragonQuestBinaryFileReader {
         //byte[] data = new byte[size];
         file.seek(startSector * SECTORSIZE);
         
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        config.trace("read file sectors of size " + size);
+        
+        config.trace(MemoryUtility.memoryStatistics());
+        if(size < Runtime.getRuntime().totalMemory()) {
+            config.trace("need more memory");
+        }
+        
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(size);
+        
+        boolean oldCode = false;
+        
+        byte[] buffer2048 = new byte[2048];
+        
+        long begin = System.currentTimeMillis();
+        
+        config.trace("begin");
         while(baos.size() < size) {
-            
-            byte[] sector = new byte[SECTORSIZE];
-            file.read(sector);
             
             /*
             Mode2/Form1 (CD-XA)
@@ -139,13 +163,36 @@ public class DragonQuestBinaryFileReader {
             //--
             //24 bytes header
             
-            byte[] userData = Arrays.copyOfRange(sector, 24, 24 + 2048);
-            
-            baos.write(userData);
+            if(oldCode) {
+                byte[] sector = new byte[SECTORSIZE];
+                file.read(sector);
+                byte[] userData = Arrays.copyOfRange(sector, 24, 24 + 2048);
+                baos.write(userData);
+            } else {
+                //sectorsize = 2352
+                
+                //config.trace("skipBytes(24)");
+                file.skipBytes(24);
+                
+                //read user data
+                //config.trace("read user data");
+                int len = file.read(buffer2048);
+                baos.write(buffer2048, 0, len);
+                
+                //remaining = 2352 - 24 - 2048 = 280
+                
+                //config.trace("skipBytes(280)");
+                file.skipBytes(280);
+                
+                //config.trace(baos.size() + "/" + size + " bytes read");
+            }
         }        
+        long end = System.currentTimeMillis();
+        config.trace("took " + (end - begin) + " ms");
         
         byte[] data = baos.toByteArray();
         
+        config.trace(data.length + " bytes read");
         switch(name) {
             case "HBD1PS1D.Q41": 
                 HeartBeatData hbd = heartBeatDataReader.read(new ByteArrayInputStream(data));

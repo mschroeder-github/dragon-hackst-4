@@ -20,7 +20,10 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
     
     private HeartBeatDataFolderEntryReader folderReader;
     
+    private IOConfig config;
+    
     public HeartBeatDataReader(IOConfig config) {
+        this.config = config;
         folderReader = new HeartBeatDataFolderEntryReader(config);
     }
     
@@ -32,6 +35,7 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
         int sectorIndex = 0;
         
         //first entry
+        config.trace("first entry");
         byte[] first = new byte[SECTORSIZE];
         input.read(first);
         HeartBeatDataBinaryEntry firstEntry = new HeartBeatDataBinaryEntry();
@@ -40,7 +44,11 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
         hbd.getEntries().add(firstEntry);
         entryIndex++;
         
+        config.setProgressMax(44657);
+        
         while(true) {
+            config.trace("entry index " + entryIndex + "/44657");
+             config.setProgressValue(entryIndex);
             
             byte[] sector = new byte[SECTORSIZE];
             int read = input.read(sector);
@@ -50,6 +58,7 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
             }
               
             if(isH600(sector)) {
+                config.trace("H600 entry");
                 
                 HeartBeatData60010108Entry h6001 = new HeartBeatData60010108Entry();
                 h6001.setData(sector);
@@ -57,7 +66,8 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
                 hbd.getEntries().add(h6001);
                 
             } else if(isFolder(sector)) {
-
+                config.trace("folder entry");
+                
                 //we buffer all sectors of a folder in one byte array
                 ByteArrayOutputStream folderBuffer = new ByteArrayOutputStream();
                 folderBuffer.write(sector);
@@ -78,6 +88,7 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
                 
                 
             } else if(Verifier.allZero(sector)) {
+                config.trace("zero entry");
                 
                 //a zero-bytes sector entry
                 HeartBeatDataBinaryEntry entry = new HeartBeatDataBinaryEntry();

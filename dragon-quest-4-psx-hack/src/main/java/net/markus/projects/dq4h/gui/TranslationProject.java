@@ -114,6 +114,8 @@ public class TranslationProject {
      * @throws IOException 
      */
     public void open(File binaryFile, ProjectListener listener) throws IOException {
+        ioConfig.setProjectListener(listener);
+        
         listener.setProgressMax(3);
         listener.setProgressValue(0);
         
@@ -129,6 +131,7 @@ public class TranslationProject {
         listener.setProgressText("Took " + (end - begin) + " ms");
         listener.setProgressText(MemoryUtility.memoryStatistics());
         listener.setProgressText(binary.toString());
+        listener.setProgressMax(3);
         listener.setProgressValue(1);
         
         //open translation file based on basename
@@ -277,8 +280,8 @@ public class TranslationProject {
         Desktop desktop;
         if (Desktop.isDesktopSupported() && (desktop = Desktop.getDesktop()).isSupported(Desktop.Action.MAIL)) {
             try {
-                String subjectEsc = URLEncoder.encode(subject, StandardCharsets.UTF_8).replace("+", "%20");
-                String bodyEsc = URLEncoder.encode(body, StandardCharsets.UTF_8).replace("+", "%20");
+                String subjectEsc = URLEncoder.encode(subject, "UTF-8"/*StandardCharsets.UTF_8*/).replace("+", "%20");
+                String bodyEsc = URLEncoder.encode(body, "UTF-8"/*StandardCharsets.UTF_8*/).replace("+", "%20");
                 
                 URI mailto = new URI("mailto:"+ mail +"?subject=" + subjectEsc + "&body=" + bodyEsc);
                 desktop.mail(mailto);
@@ -437,7 +440,7 @@ public class TranslationProject {
                     textObj.put(String.valueOf(rowIndex), seqObj);
                 }
                 
-                if(value.isBlank()) {
+                if(value.trim().isEmpty()) {
                     seqObj.remove("translation");
                 } else {
                     
