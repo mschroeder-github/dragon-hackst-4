@@ -35,7 +35,9 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         
         //textContent.getText().forEach(c -> System.out.println(c));
         
+        //this block was for checking the size, but now it can be bigger than orginal
         //maybe we just extend the text bytes by zeros until file size is reached
+        /*
         int treeBytesDiff = textContent.getOriginalTreeBytes().length - treeBytes.length;
         int textBytesDiff = textContent.getOriginalTextBytes().length - textBytes.length;
         
@@ -58,10 +60,12 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
             );
         }
         
+        
         //this works
         byte[] longerTextBytes = new byte[textBytes.length + treeBytesDiff + textBytesDiff];
         System.arraycopy(textBytes, 0, longerTextBytes, 0, textBytes.length);
         textBytes = longerTextBytes;
+        */
         
         //better safe than sorry
         List<HuffmanCharacter> parsedText = reader.decodeText(textBytes, parsedTree);
@@ -140,10 +144,13 @@ public class HeartBeatDataTextContentWriter extends DragonQuestWriter<HeartBeatD
         
         //fill with zeros until we reach the original file size
         //hopefully this will work and not break the game
+        //because file can now grow bigger than original, we do not have to add zeros here anymore
+        /*
         int originalFileSize = textContent.getParent().getOriginalContentBytes().length;
         while(dqos.getPosition() < originalFileSize) {
             dqos.write(new byte[] { 0 });
         }
+        */
         
     }
     

@@ -13,14 +13,24 @@ import net.markus.projects.dq4h.io.Verifier;
  */
 public class DragonQuestBinary implements DragonQuestComparator<DragonQuestBinary> {
 
-    private HeartBeatData heartBeatData;
-    private PsxExe executable;
+    //first 22 sectors (2352 * 22)
+    private byte[] firstSectors;
     private SystemConfig systemConfig;
+    private PsxExe executable;
+    private HeartBeatData heartBeatData;
 
     private Map<String, DiskFileInfo> diskFiles;
     
     public DragonQuestBinary() {
         diskFiles = new HashMap<>();
+    }
+
+    public byte[] getFirstSectors() {
+        return firstSectors;
+    }
+
+    public void setFirstSectors(byte[] firstSectors) {
+        this.firstSectors = firstSectors;
     }
     
     public HeartBeatData getHeartBeatData() {
@@ -73,6 +83,7 @@ public class DragonQuestBinary implements DragonQuestComparator<DragonQuestBinar
 
     @Override
     public void compare(DragonQuestBinary other, ComparatorReport report) {
+        Verifier.compareBytes(this, this.firstSectors, other, other.firstSectors, "first sectors", report);
         Verifier.compareBytes(this.executable, this.executable.getData(), other.executable, other.executable.getData(), "executable", report);
         Verifier.compareBytes(this.systemConfig, this.systemConfig.getData(), other.systemConfig, other.systemConfig.getData(), "systemConfig", report);
         this.heartBeatData.compare(other.heartBeatData, report);

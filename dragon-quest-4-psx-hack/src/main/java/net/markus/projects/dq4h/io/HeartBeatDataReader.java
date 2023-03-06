@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import net.markus.projects.dq4h.data.DragonQuestBinary;
 import net.markus.projects.dq4h.data.HeartBeatData;
 import net.markus.projects.dq4h.data.HeartBeatData60010108Entry;
 import net.markus.projects.dq4h.data.HeartBeatDataBinaryEntry;
@@ -29,10 +30,14 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
     
     @Override
     public HeartBeatData read(InputStream input) throws IOException {
+        return read(input, null);
+    }
+    
+    public HeartBeatData read(InputStream input, DragonQuestBinary binary) throws IOException {
         HeartBeatData hbd = new HeartBeatData();
         
         int entryIndex = 0;
-        int sectorIndex = 0;
+        int sectorIndex = binary == null ? 0 : binary.getDiskFile("HBD1PS1D.Q41").getStartSector();
         
         //first entry
         config.trace("first entry");
@@ -41,14 +46,16 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
         HeartBeatDataBinaryEntry firstEntry = new HeartBeatDataBinaryEntry();
         firstEntry.setData(first);
         firstEntry.setIndex(entryIndex);
+        firstEntry.setSector(sectorIndex);
         hbd.getEntries().add(firstEntry);
         entryIndex++;
+        sectorIndex++;
         
         config.setProgressMax(44657);
         
         while(true) {
             config.trace("entry index " + entryIndex + "/44657");
-             config.setProgressValue(entryIndex);
+            config.setProgressValue(entryIndex);
             
             byte[] sector = new byte[SECTORSIZE];
             int read = input.read(sector);
@@ -63,7 +70,11 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
                 HeartBeatData60010108Entry h6001 = new HeartBeatData60010108Entry();
                 h6001.setData(sector);
                 h6001.setIndex(entryIndex);
+                h6001.setSector(sectorIndex);
+                h6001.setSectorCount(1);
                 hbd.getEntries().add(h6001);
+                
+                sectorIndex++;
                 
             } else if(isFolder(sector)) {
                 config.trace("folder entry");
@@ -84,7 +95,11 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
                 ByteArrayInputStream folderInput = new ByteArrayInputStream(folderBuffer.toByteArray());
                 HeartBeatDataFolderEntry folderEntry = folderReader.read(folderInput);
                 folderEntry.setIndex(entryIndex);
+                folderEntry.setSector(sectorIndex);
+                folderEntry.setSectorCount(folderSectors);
                 hbd.getEntries().add(folderEntry);
+                
+                sectorIndex += folderSectors;
                 
                 
             } else if(Verifier.allZero(sector)) {
@@ -94,14 +109,17 @@ public class HeartBeatDataReader extends DragonQuestReader<HeartBeatData> {
                 HeartBeatDataBinaryEntry entry = new HeartBeatDataBinaryEntry();
                 entry.setData(sector);
                 entry.setIndex(entryIndex);
+                entry.setSector(sectorIndex);
+                entry.setSectorCount(1);
                 hbd.getEntries().add(entry);
+                
+                sectorIndex++;
                 
             } else {
                 throw new IOException("Unknown sector type at " + entryIndex);
             }
             
             entryIndex++;
-            sectorIndex++;
             
             //System.out.println(entryIndex + " read");
         }

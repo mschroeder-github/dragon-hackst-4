@@ -33,6 +33,7 @@ import net.markus.projects.dq4h.io.Inspector;
 import net.markus.projects.dq4h.io.ShiftJIS;
 import net.markus.projects.dq4h.util.MemoryUtility;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.crosswire.common.compress.LZSS;
 import org.json.JSONObject;
 
@@ -55,12 +56,16 @@ public class Translator {
 
         translator.importData();
         
-        translator.checkJapaneseText();
+        //translator.checkJapaneseText();
         
         //translator.checkTextSequences();
 
         //in cellar
-        //translator.selectiveTranslationTest("006c");
+        JSONObject json006c = new JSONObject();
+        JSONObject line10 = new JSONObject();
+        line10.put("translation", translator.getLongTranslationTest());
+        json006c.put("10", line10);
+        translator.selectiveTranslation("006c", json006c);
         //town outside
         //translator.selectiveTranslation("0067");
         
@@ -69,7 +74,7 @@ public class Translator {
         
         //translator.pointerCompleteTranslationTest();
 
-        //translator.exportData();
+        translator.exportData();
     }
 
     public Translator() {
@@ -114,12 +119,8 @@ public class Translator {
         long begin = System.currentTimeMillis();
 
         DragonQuestBinaryFileWriter binWriter = new DragonQuestBinaryFileWriter(config);
-        binWriter.patch(
-                binary,
-                inputFile,
-                outputFile
-        );
-
+        binWriter.write(binary, outputFile);
+        
         long end = System.currentTimeMillis();
 
         System.out.println("took " + (end - begin) + " ms, " + MemoryUtility.memoryStatistics());
@@ -144,6 +145,48 @@ public class Translator {
         });
     }
 
+    /**
+     * Loads from resources a long text string for translation testing with large text body.
+     * @return 
+     */
+    public String getLongTranslationTest() throws IOException {
+        String text = IOUtils.toString(Translator.class.getResourceAsStream("/longTranslationTest.txt"), StandardCharsets.UTF_8);
+        //cleanup
+        text = text.replace("\n", " ").replace("\t", " ").replaceAll("\\s+", " ");
+        
+        StringBuilder sb = new StringBuilder();
+        
+        int maxW = 16;
+        int line = 0;
+        boolean first = true;
+        
+        sb.append("{7f04}");
+        
+        //{7f02} = next line, tab
+        //{7f0a} = blinking cursor, wait for user input, moves two lines up, third line is at top, 
+        for(int i = 0; i < text.length(); i++) {
+            sb.append(text.charAt(i));
+            
+            if(i > 0 && i % maxW == 0) {
+                //next line, tab
+                if(line <= (first ? 1 : 0)) {
+                    sb.append("{7f02}");
+                }
+                line++;
+            }
+            
+            if(line == (first ? 3 : 2)) {
+                line = 0;
+                sb.append("{7f0a}{7f02}");
+                first = false;
+            }
+        }
+        
+        sb.append("{7f0a}{0000}");
+        
+        return sb.toString();
+    }
+    
     //-----------------------
     //just checks
     

@@ -6,6 +6,10 @@ import java.io.IOException;
 import java.util.List;
 import net.markus.projects.dq4h.compare.ComparatorReport;
 import net.markus.projects.dq4h.data.DragonQuestBinary;
+import net.markus.projects.dq4h.data.HeartBeatDataBinaryEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataFolderEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataTextContent;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileReader;
 import net.markus.projects.dq4h.io.DragonQuestBinaryFileWriter;
 import net.markus.projects.dq4h.io.IOConfig;
@@ -28,11 +32,7 @@ public class ImportExportImportRoundtrip {
         
         DragonQuestBinary originalBin = importData(inputFile, config);
         
-        if(true) {
-            Translator translator = new Translator();
-            translator.setBinary(originalBin);
-            translator.selectiveTranslationTest("006c");
-        }
+        changeSomething(originalBin);
         
         exportData(originalBin, inputFile, outputFile, config);
         
@@ -65,19 +65,18 @@ public class ImportExportImportRoundtrip {
         long begin = System.currentTimeMillis();
         
         DragonQuestBinaryFileWriter binWriter = new DragonQuestBinaryFileWriter(config);
-        binWriter.patch(
-                inputBin,
-                inputFile,
-                outputFile
-        );
+        //binWriter.patch(inputBin, inputFile, outputFile);
+        binWriter.write(inputBin, outputFile);
         
         long end = System.currentTimeMillis();
         
         System.out.println("took " + (end - begin) + " ms, " + MemoryUtility.memoryStatistics());
         
-        if(inputFile.length() != outputFile.length()) {
-            throw new RuntimeException("file length differ");
-        }
+        System.out.println(inputFile.length() + " bytes input vs\n" + outputFile.length() + " bytes output");
+        
+        //if(inputFile.length() != outputFile.length()) {
+        //   throw new RuntimeException("file length differ");
+        //}
         
         if(false) {
             begin = System.currentTimeMillis();
@@ -125,6 +124,35 @@ public class ImportExportImportRoundtrip {
         inputBin.compare(outputBin, report);
         
         System.out.println(report);
+    }
+    
+    private void changeSomething(DragonQuestBinary originalBin) {
+        insertSector(originalBin);
+    }
+    
+    private void insertSector(DragonQuestBinary binary) {
+        HeartBeatDataEntry[] originalEntries = binary.getHeartBeatData().getEntries().toArray(new HeartBeatDataEntry[0]);
+        
+        for (int i = 0; i < originalEntries.length; i++) {
+
+            HeartBeatDataEntry entry = originalEntries[i];
+            
+            if (entry instanceof HeartBeatDataFolderEntry) {
+                HeartBeatDataFolderEntry folder = (HeartBeatDataFolderEntry) entry;
+                List<HeartBeatDataTextContent> l = folder.getContents(HeartBeatDataTextContent.class);
+                if (!l.isEmpty() && l.get(0).getIdHex().equals("006c")) {
+                    HeartBeatDataBinaryEntry binEntry = new HeartBeatDataBinaryEntry();
+                    binEntry.setData(new byte[DragonQuestBinaryFileWriter.SECTOR_USER_SIZE]);
+                    binary.getHeartBeatData().getEntries().add(i, binEntry);
+                }
+            }
+        }
+    }
+    
+    private void translationTest(DragonQuestBinary originalBin) {
+        Translator translator = new Translator();
+        translator.setBinary(originalBin);
+        translator.selectiveTranslationTest("006c");
     }
     
     public static void main(String[] args) throws IOException {

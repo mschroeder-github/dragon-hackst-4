@@ -175,9 +175,13 @@ public class Inspector {
     }
     
     public static List<Integer> find(byte[] pattern, byte[] data) {
+        return find(pattern, data, 0);
+    }
+    
+    public static List<Integer> find(byte[] pattern, byte[] data, int start) {
         List<Integer> pos = new ArrayList<>();
 
-        for (int i = 0; i < data.length - pattern.length + 1; i++) { //+1 to really get to the last byte
+        for (int i = start; i < data.length - pattern.length + 1; i++) { //+1 to really get to the last byte
             byte[] copy = Arrays.copyOfRange(data, i, i + pattern.length);
 
             if (Arrays.equals(copy, pattern)) {
@@ -186,5 +190,16 @@ public class Inspector {
         }
 
         return pos;
+    }
+    
+    /**
+     * Writes hex at position in data.
+     * @param data
+     * @param hex
+     * @param position 
+     */
+    public static void overwrite(byte[] data, String hex, int position) {
+        byte[] pattern = toBytes(hex);
+        System.arraycopy(pattern, 0, data, position, pattern.length);
     }
 }

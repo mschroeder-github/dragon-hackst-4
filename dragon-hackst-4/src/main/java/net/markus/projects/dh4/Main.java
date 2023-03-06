@@ -56,7 +56,7 @@ public class Main {
         System.out.println("transform");
         
         //analyseTextBlocksV2(hbd);
-        //inspectWithGUI(hbd);
+        inspectWithGUI(hbd);
         //RAMmap(hbd, new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/2022-01-08-chapter-1.bin"));//2022-01-08-in-town.bin
         //RAMsearch("06700B2E", new File("../../Dragon Quest IV - Michibikareshi Mono Tachi (Japan)/2022-01-08-in-town.bin"));
         //hbdSearch("DA05F0FF C21E2039", hbd);
@@ -64,7 +64,7 @@ public class Main {
         //translationEmbedding(hbd, psexe, dqFiles);
         //translationEmbeddingV2(hbd, psexe, dqFiles);
         //translationEmbeddingV2onlyCompress(hbd, dqFiles);
-        translationEmbeddingV2(hbd, dqFiles);
+        //translationEmbeddingV2(hbd, dqFiles);
         //analyseTextBlocks(hbd);
         //printBlocks(hbd);
         //h60010108Blocks(hbd);

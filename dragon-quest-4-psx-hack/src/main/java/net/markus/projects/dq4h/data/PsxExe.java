@@ -7,6 +7,7 @@ package net.markus.projects.dq4h.data;
 public class PsxExe {
 
     private byte[] data;
+    private byte[] originalData;
 
     public byte[] getData() {
         return data;
@@ -14,6 +15,14 @@ public class PsxExe {
 
     public void setData(byte[] data) {
         this.data = data;
+    }
+
+    public byte[] getOriginalData() {
+        return originalData;
+    }
+
+    public void setOriginalData(byte[] originalData) {
+        this.originalData = originalData;
     }
     
 }

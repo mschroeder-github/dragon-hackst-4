@@ -7,8 +7,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Arrays;
+import java.util.List;
 import net.markus.projects.dq4h.data.DragonQuestBinary;
 import net.markus.projects.dq4h.data.HeartBeatData;
+import net.markus.projects.dq4h.data.HeartBeatDataEntry;
+import net.markus.projects.dq4h.data.HeartBeatDataFolderEntry;
 import net.markus.projects.dq4h.data.PsxExe;
 import net.markus.projects.dq4h.data.SystemConfig;
 import net.markus.projects.dq4h.util.MemoryUtility;
@@ -70,6 +73,7 @@ public class DragonQuestBinaryFileReader {
         byte[] rootData = Arrays.copyOfRange(sector, 24, 2072);
         int startSector = readLittleEndianWord(Arrays.copyOfRange(rootData, 158, 162));
 		int size = readLittleEndianWord(Arrays.copyOfRange(rootData, 166,170));
+        config.trace("start Sector: " + startSector);
         
         
         //files in root
@@ -93,6 +97,12 @@ public class DragonQuestBinaryFileReader {
                 index += offset - 1;
             }
         }
+        
+        //first 22 sectors of CD
+        data = new byte[SECTORSIZE * 22];
+        file.seek(0);
+        file.read(data);
+        binary.setFirstSectors(data);
         
         file.close();
         
@@ -195,13 +205,15 @@ public class DragonQuestBinaryFileReader {
         config.trace(data.length + " bytes read");
         switch(name) {
             case "HBD1PS1D.Q41": 
-                HeartBeatData hbd = heartBeatDataReader.read(new ByteArrayInputStream(data));
+                HeartBeatData hbd = heartBeatDataReader.read(new ByteArrayInputStream(data), binary);
                 binary.setHeartBeatData(hbd);
                 break;
             case "SLPM_869.16": 
                 PsxExe exe = new PsxExe();
                 exe.setData(data);
+                exe.setOriginalData(Arrays.copyOf(data, data.length));
                 binary.setExecutable(exe);
+                findPointerToFolders(binary.getHeartBeatData(), exe);
                 break;
             case "SYSTEM.CNF": 
                 SystemConfig conf = new SystemConfig();
@@ -213,6 +225,32 @@ public class DragonQuestBinaryFileReader {
                 throw new IOException("The following sector is not expected: " + name);
         }
 	}   
+    
+    private void findPointerToFolders(HeartBeatData hbd, PsxExe exe) {
+        for (HeartBeatDataEntry entry : hbd.getEntries()) {
+            if (entry instanceof HeartBeatDataFolderEntry) {
+                
+                
+                byte[] pattern = Inspector.toBytes(entry.getSectorAddressCountStoredHex());
+                List<Integer> positions = Inspector.find(pattern, exe.getData(), 603632);
+                positions.removeIf(i -> i % 4 != 0);
+                
+                if(positions.isEmpty()) { 
+                    //this happens two times
+                    continue;
+                }
+                if(positions.size() > 1) {
+                    throw new RuntimeException("ambiguous reference");
+                }
+                
+                int position = positions.get(0);
+                
+                HeartBeatDataFolderEntry folder = (HeartBeatDataFolderEntry) entry;
+                folder.setExe(exe);
+                folder.setReferenceInExe(position);
+            }
+        }
+    }
     
 	private boolean isHeader(byte[] header) {
 		return (header[1] == 67) && (header[2] == 68) && (header[3] == 48)

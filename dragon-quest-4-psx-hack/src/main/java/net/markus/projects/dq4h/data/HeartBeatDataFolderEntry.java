@@ -43,6 +43,9 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
     
     private List<HeartBeatDataFile> files;
     
+    private PsxExe exe;
+    private int referenceInExe;
+    
     public HeartBeatDataFolderEntry() {
         files = new ArrayList<>();
     }
@@ -169,6 +172,33 @@ public class HeartBeatDataFolderEntry extends HeartBeatDataEntry implements Drag
     public void setNumberOfRemainingBytes(int numberOfRemainingBytes) {
         this.numberOfRemainingBytes = numberOfRemainingBytes;
     }
+
+    public PsxExe getExe() {
+        return exe;
+    }
+
+    public void setExe(PsxExe exe) {
+        this.exe = exe;
+    }
+
+    /**
+     * Returns the position where the PSX EXE refers to this folder
+     * using {@link #getSectorAddressCountStoredHex() }.
+     * @return 
+     */
+    public int getReferenceInExe() {
+        return referenceInExe;
+    }
+
+    /**
+     * Sets the byte position where the PSX EXE refers to this folder.
+     * @param referenceInExe 
+     */
+    public void setReferenceInExe(int referenceInExe) {
+        this.referenceInExe = referenceInExe;
+    }
+    
+    
     
     @Override
     public String toString() {

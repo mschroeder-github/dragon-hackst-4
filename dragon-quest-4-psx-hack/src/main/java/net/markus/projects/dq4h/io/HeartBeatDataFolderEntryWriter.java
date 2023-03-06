@@ -115,6 +115,8 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                 }
                 
                 //check if we wrote more than in the original
+                //because folder can now grow larger than original, we do not perform this check
+                /*
                 int sizeDiff = content.getSize() - file.getOriginalContentBytes().length;
                 if(sizeDiff > 0) {
                     
@@ -126,6 +128,7 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                     //if there is no overflow we reduce the number of remaining bytes to let also other files check this value
                     folder.changeNumberOfRemainingBytes(-sizeDiff);
                 }
+                */
                 
                 //log if a file was changed
                 int i = Verifier.compare(file.getOriginalContentBytes(), contentBytes);
@@ -147,6 +150,8 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
         HeartBeatDataFolderEntry expectedFolder = HeartBeatDataFolderEntry.calculateExpectedFolder(file2content.values());
 
         //we have to use the same number of sectors so that there is no data shift
+        //update: we now allow data shift
+        /*
         if (expectedFolder.getOriginalNumberOfSectors() != folder.getOriginalNumberOfSectors()) {
             throw new IOException(String.format("Sector missmatch: expected sectors (%d) != original sectors (%d).\n%s\n%s",
                     expectedFolder.getOriginalNumberOfSectors(),
@@ -155,7 +160,8 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
                     folder
             ));
         }
-
+        */
+        
         DragonQuestOutputStream dqos = new DragonQuestOutputStream(output);
 
         //folder header info (16 bytes)
@@ -187,14 +193,19 @@ public class HeartBeatDataFolderEntryWriter extends DragonQuestWriter<HeartBeatD
         }
 
         //the expected one should be the actual one
-        if(folder.getNumberOfRemainingBytes() != expectedFolder.getOriginalNumberOfRemainingBytes()) {
-            throw new IOException("Expected number of bytes is wrong");
-        }
+        //if(folder.getNumberOfRemainingBytes() != expectedFolder.getOriginalNumberOfRemainingBytes()) {
+        //    throw new IOException("Expected number of bytes is wrong");
+        //}
         
         //fill remaining space with zero bytes
         //this is already the expected size and it considers if the file sizes changed
-        dqos.write(new byte[expectedFolder.getOriginalNumberOfRemainingBytes()]);
-
+        //dqos.write(new byte[expectedFolder.getOriginalNumberOfRemainingBytes()]);
+        //we now have to fill up to the next sector when folder size can change
+        int zeroByteCount = 0;
+        while(dqos.getPosition() % DragonQuestBinaryFileWriter.SECTOR_USER_SIZE != 0) {
+            dqos.write(new byte[] { 0 });
+            zeroByteCount++;
+        }
     }
 
 }
